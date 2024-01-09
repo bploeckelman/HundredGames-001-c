@@ -19,6 +19,13 @@ include(FetchContent)
 
 ### Dependencies --------------------------------------------------------------
 
+if (WIN32)
+#    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(PThreads4W REQUIRED)
+else ()
+    find_package(Threads REQUIRED)
+endif()
+
 find_package(raylib ${RAYLIB_VERSION} QUIET)
 if (NOT raylib_FOUND)
     FetchContent_Declare(
@@ -57,6 +64,7 @@ endif()
 add_executable(${PROJECT_NAME}
         src/main.c
         include/common.h
+        lib/physac.h
 )
 #set(raylib_VERBOSE 1)
 
@@ -64,11 +72,18 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE "${raygui_SOURCE_DIR}/src"
         PRIVATE "${raygui_SOURCE_DIR}/styles"
         PRIVATE include
+        PRIVATE lib
 )
 
 ### Library linkage -----------------------------------------------------------
 
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
+
+if (WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE PThreads4W::PThreads4W)
+else ()
+    target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
+endif()
 
 # Checks if OSX and links appropriate frameworks (only required on MacOS)
 if (APPLE)

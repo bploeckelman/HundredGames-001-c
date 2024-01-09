@@ -19,6 +19,7 @@ typedef int64_t i64;
 // ----------------------------------------------------------------------------
 // Game state data
 // ----------------------------------------------------------------------------
+typedef struct PhysicsBodyData *PhysicsBody;
 
 typedef struct State {
     struct Window {
@@ -26,6 +27,13 @@ typedef struct State {
         int height;
         char* title;
     } window;
+
+    struct Scene {
+        struct Physics {
+            PhysicsBody floor;
+            PhysicsBody ball;
+        } physics;
+    } scene;
 
     Camera2D camera;
     RenderTexture render_texture;
