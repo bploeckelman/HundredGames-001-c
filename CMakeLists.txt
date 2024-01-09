@@ -14,12 +14,13 @@ set(DATA_DIR "${CMAKE_SOURCE_DIR}/data")
 
 ### Dependencies --------------------------------------------------------------
 
-# pthread for physac
-if (WIN32)
-    find_package(PThreads4W REQUIRED)
-else ()
-    find_package(Threads REQUIRED)
-endif()
+# box2d 3 (ie. box2c - https://github.com/erincatto/box2c
+FetchContent_Declare(box2d
+        GIT_REPOSITORY https://github.com/erincatto/box2c.git
+        GIT_TAG main
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+FetchContent_MakeAvailable(box2d)
 
 # raylib
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) # don't build the supplied examples
@@ -45,7 +46,6 @@ FetchContent_MakeAvailable(raygui)
 add_executable(${PROJECT_NAME}
         src/main.c
         include/common.h
-        lib/physac.h
 )
 #set(raylib_VERBOSE 1)
 
@@ -53,18 +53,10 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE "${raygui_SOURCE_DIR}/src"
         PRIVATE "${raygui_SOURCE_DIR}/styles"
         PRIVATE include
-        PRIVATE lib
 )
 
-# link raylib
-target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
-
-# link pthread for physac
-if (WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE PThreads4W::PThreads4W)
-else ()
-    target_link_libraries(${PROJECT_NAME} PRIVATE Threads::Threads)
-endif()
+# link raylib and box2d
+target_link_libraries(${PROJECT_NAME} PRIVATE raylib box2d)
 
 # link mac frameworks if needed
 if (APPLE)

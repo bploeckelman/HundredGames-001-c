@@ -8,11 +8,7 @@
 #include "raygui.h"
 #include "dark/style_dark.h"
 
-// undefine crt stdlib.h min/max macros, they conflict with physac.h
-#undef min
-#undef max
-#define PHYSAC_IMPLEMENTATION
-#include "physac.h"
+#include "box2d/box2d.h"
 
 #include "common.h"
 
@@ -57,23 +53,29 @@ static void Init() {
     // init raygui
     GuiLoadStyleDark();
 
-    // init physac
-    InitPhysics();
-    SetPhysicsGravity(0, -9.8f * 0.16f);
-    //SetPhysicsTimeStep(1.0/60.0/100*1000);
+    // init box2d
+    // TODO - move to 'init game state' section
+    state.scene.physics.world_id = b2CreateWorld(&b2_defaultWorldDef);
+
+    const b2BodyDef ground_def = b2_defaultBodyDef;
+    state.scene.physics.ground_body_id = b2CreateBody(state.scene.physics.world_id, &ground_def);
+    const b2Segment ground_segment = {
+        {-state.window.width / 2, -state.window.height / 2 + 20},
+        {state.window.width / 2, -state.window.height / 2 + 20}
+    };
+    const b2ShapeDef ground_shape = b2_defaultShapeDef;
+    b2CreateSegmentShape(state.scene.physics.ground_body_id, &ground_shape, &ground_segment);
+
+    b2BodyDef ball_def = b2_defaultBodyDef;
+    ball_def.type = b2_dynamicBody;
+    state.scene.physics.ball_body_id = b2CreateBody(state.scene.physics.world_id, &ball_def);
+    const b2Circle ball_circle = { {0, 0}, 25 };
+    b2ShapeDef ball_shape = b2_defaultShapeDef;
+    ball_shape.restitution = 0.8f;
+    ball_shape.density = 5.0f;
+    b2CreateCircleShape(state.scene.physics.ball_body_id, &ball_shape, &ball_circle);
 
     // init game state
-    state.scene.physics = (struct Physics){
-        .floor = CreatePhysicsBodyRectangle(
-            (Vector2){0, -state.window.height / 2},
-            state.window.width,
-            50,
-            10),
-        .ball = CreatePhysicsBodyCircle(
-            (Vector2){0, 0},
-            30,
-            10)
-    };
     state.camera = (Camera2D){
         .target = (Vector2){0.0f, 0.0f},
         .offset = (Vector2){0.0f, 0.0f},
@@ -81,32 +83,12 @@ static void Init() {
         .zoom = 1.0f
     };
     state.render_texture = LoadRenderTexture(state.window.width, state.window.height);
-
-    // set floor physics body as static
-    state.scene.physics.floor->enabled = false;
 }
 
 static void Update() {
     // update physics bodies
-    // const int numBodies = GetPhysicsBodiesCount();
-    // for (int i = 0; i < numBodies; i++) {
-    //     const PhysicsBody body = GetPhysicsBody(i);
-    //     if (body != NULL && body->enabled) {
-    //         if (body == state.scene.physics.ball) {
-    //             if (CheckCollisionCircleRec(
-    //                     body->position,
-    //                     body->shape.radius,
-    //                     (Rectangle){
-    //                         state.scene.physics.floor->position.x - state.window.width / 2,
-    //                         state.scene.physics.floor->position.y - 50 / 2,
-    //                         state.window.width,
-    //                         50})) {
-    //                 // reset ball position
-    //                 body->position = (Vector2){0, state.window.height / 2};
-    //             }
-    //         }
-    //     }
-    // }
+    const float time = 0.1f; // fixed time step
+    b2World_Step(state.scene.physics.world_id, time, 8, 3);
 
     // update camera
     state.camera.target = (Vector2){0, 0};
@@ -122,21 +104,25 @@ static void DrawFrame() {
 
     BeginMode2D(state.camera);
 
-    const int numBodies = GetPhysicsBodiesCount();
-    for (int i = 0; i < numBodies; i++) {
-        const PhysicsBody body = GetPhysicsBody(i);
-        if (body == NULL) {
-            continue;
-        }
+    // TODO - setup b2DebugDraw instance with callbacks for each shape that use raylib drawing functions
+    // b2World_Draw(scene.world_id, &b2_debug_draw);
 
-        const int numVertices = GetPhysicsShapeVerticesCount(i);
-        for (int curr = 0; curr < numVertices; curr++) {
-            const int next = ((curr + 1) < numVertices) ? curr + 1 : 0;
-            const Vector2 vertexA = GetPhysicsShapeVertex(body, curr);
-            const Vector2 vertexB = GetPhysicsShapeVertex(body, next);
-            DrawLineV(vertexA, vertexB, RED);
-        }
-    }
+    const b2ShapeId shape = b2Body_GetFirstShape(state.scene.physics.ground_body_id);
+    const b2Vec2 p = b2Body_GetPosition(state.scene.physics.ground_body_id);
+    const b2Segment* segment = b2Shape_GetSegment(shape);
+    DrawLineV(
+        (Vector2){segment->point1.x - p.x, segment->point1.y - p.y},
+        (Vector2){segment->point2.x - p.x, segment->point2.y - p.y},
+        RED);
+
+    const b2ShapeId ball_shape = b2Body_GetFirstShape(state.scene.physics.ball_body_id);
+    const b2Vec2 ball_pos = b2Body_GetPosition(state.scene.physics.ball_body_id);
+    const b2Circle *circle = b2Shape_GetCircle(ball_shape);
+    DrawCircleGradient(
+        ball_pos.x - circle->point.x,
+        ball_pos.y - circle->point.y,
+        circle->radius,
+        RED, ORANGE);
 
     EndMode2D();
 
@@ -155,7 +141,8 @@ static void DrawFrame() {
 static void Shutdown() {
     UnloadRenderTexture(state.render_texture);
 
-    ClosePhysics();
+    // NOTE - destroying the world destroys all the bodies attached to it
+    b2DestroyWorld(state.scene.physics.world_id);
 
     CloseWindow();
 }

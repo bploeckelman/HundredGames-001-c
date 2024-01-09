@@ -1,8 +1,10 @@
-#ifndef INTRO_COMMON_H
-#define INTRO_COMMON_H
+#ifndef PRONG_COMMON_H
+#define PRONG_COMMON_H
 
 #include <stdint.h>
 #include <stdbool.h>
+
+#include "box2d/box2d.h"
 
 typedef float f32;
 typedef double f64;
@@ -19,7 +21,6 @@ typedef int64_t i64;
 // ----------------------------------------------------------------------------
 // Game state data
 // ----------------------------------------------------------------------------
-typedef struct PhysicsBodyData *PhysicsBody;
 
 typedef struct State {
     struct Window {
@@ -30,8 +31,9 @@ typedef struct State {
 
     struct Scene {
         struct Physics {
-            PhysicsBody floor;
-            PhysicsBody ball;
+            b2WorldId world_id;
+            b2BodyId ground_body_id;
+            b2BodyId ball_body_id;
         } physics;
     } scene;
 
@@ -39,4 +41,4 @@ typedef struct State {
     RenderTexture render_texture;
 } State;
 
-#endif //INTRO_COMMON_H
+#endif //PRONG_COMMON_H
