@@ -29,10 +29,6 @@ typedef struct State {
         char* title;
     } window;
 
-    struct Scene {
-        int temp;
-    } scene;
-
     Camera2D camera;
     RenderTexture render_texture;
 } State;

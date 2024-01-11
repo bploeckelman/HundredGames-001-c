@@ -16,17 +16,20 @@ static void InitPhysicsDebugDraw();
 // Public implementation ------------------------------------------------------
 
 void InitPhysics(struct Window window) {
+    physics.time_accum = 0.0;
+
     InitPhysicsDebugDraw();
 
     // create the physics world
     b2WorldDef world_def = b2_defaultWorldDef;
-    // defaults are fine...
+    world_def.gravity = (b2Vec2){0, -100};
     physics.world = b2CreateWorld(&world_def);
 
     // create the physics bodies
     b2BodyDef ball_def = b2_defaultBodyDef;
     ball_def.type = b2_dynamicBody;
     physics.bodies.ball = b2CreateBody(physics.world, &ball_def);
+    physics.bodies.ball2 = b2CreateBody(physics.world, &ball_def);
 
     b2BodyDef wall_def = b2_defaultBodyDef;
     wall_def.type = b2_staticBody;
@@ -36,11 +39,22 @@ void InitPhysics(struct Window window) {
     physics.bodies.right = b2CreateBody(physics.world, &wall_def);
 
     // create a shape for the physics ball body
-    b2Circle ball_circle = {{0, 0}, 25};
+    b2Circle ball_circle = {{20, 200}, 25};
+    b2Circle ball2_circle = {{0, 0}, 50};
     b2ShapeDef ball_shape_def = b2_defaultShapeDef;
-    ball_shape_def.restitution = 0.9f;
+    ball_shape_def.restitution = 0.95f;
     ball_shape_def.density = 0.1f;
+    b2ShapeDef ball2_shape_def = b2_defaultShapeDef;
+    ball2_shape_def.restitution = 0.9f;
+    ball2_shape_def.density = 0.1f;
     b2CreateCircleShape(physics.bodies.ball, &ball_shape_def, &ball_circle);
+    b2CreateCircleShape(physics.bodies.ball2, &ball2_shape_def, &ball2_circle);
+
+    // set the initial velocity of the balls to be full gravity
+    // so they don't have to accelerate from 0
+    b2Body_SetLinearVelocity(physics.bodies.ball, (b2Vec2){0, -100});
+    b2Body_SetLinearVelocity(physics.bodies.ball2, (b2Vec2){0, -100});
+
 
     // create shapes for the physics wall bodies
     const float margin = 40;
@@ -73,12 +87,21 @@ void InitPhysics(struct Window window) {
 
 void UpdatePhysics() {
     // update the physics world
-    // TODO - https://gafferongames.com/post/fix_your_timestep/
-    const float fixed_time_step = 1.0f / 60.0f;
-    float dt = GetFrameTime();
-    while (dt > 0.0f) {
+    // roughly: https://gafferongames.com/post/fix_your_timestep/
+    const float fixed_time_step = 1.0f / 100.0f;
+
+    // keep track of how much time we need to simulate in this update cycle
+    float frame_time = GetFrameTime();
+    if (frame_time > 0.25f) {
+        frame_time = 0.25f;
+    }
+    physics.time_accum += frame_time;
+
+    // simulate physics in fixed time steps until we've caught up
+    while (physics.time_accum >= frame_time) {
         b2World_Step(physics.world, fixed_time_step, 8, 3);
-        dt -= fixed_time_step;
+
+        physics.time_accum -= fixed_time_step;
     }
 }
 

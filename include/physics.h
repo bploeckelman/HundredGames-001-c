@@ -6,6 +6,7 @@
 #include "box2d/box2d.h"
 
 typedef struct Physics {
+    double time_accum;
     b2WorldId world;
 
     struct Bodies {
@@ -14,6 +15,7 @@ typedef struct Physics {
         b2BodyId left;
         b2BodyId right;
         b2BodyId ball;
+        b2BodyId ball2;
     } bodies;
 } Physics;
 
