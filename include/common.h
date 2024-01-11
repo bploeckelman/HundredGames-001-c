@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "box2d/box2d.h"
+#include "raylib.h"
 
 typedef float f32;
 typedef double f64;
@@ -30,11 +30,7 @@ typedef struct State {
     } window;
 
     struct Scene {
-        struct Physics {
-            b2WorldId world_id;
-            b2BodyId ground_body_id;
-            b2BodyId ball_body_id;
-        } physics;
+        int temp;
     } scene;
 
     Camera2D camera;

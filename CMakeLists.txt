@@ -14,7 +14,7 @@ set(DATA_DIR "${CMAKE_SOURCE_DIR}/data")
 
 ### Dependencies --------------------------------------------------------------
 
-# box2d 3 (ie. box2c - https://github.com/erincatto/box2c
+# box2d 3 (ie. box2c - https://github.com/erincatto/box2c)
 FetchContent_Declare(box2d
         GIT_REPOSITORY https://github.com/erincatto/box2c.git
         GIT_TAG main
@@ -45,7 +45,9 @@ FetchContent_MakeAvailable(raygui)
 
 add_executable(${PROJECT_NAME}
         src/main.c
+        src/physics.c
         include/common.h
+        include/physics.h
 )
 #set(raylib_VERBOSE 1)
 
