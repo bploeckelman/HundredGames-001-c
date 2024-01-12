@@ -53,6 +53,7 @@ add_executable(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME}
         PRIVATE "${raygui_SOURCE_DIR}/src"
+        PRIVATE "${raygui_SOURCE_DIR}/icons"
         PRIVATE "${raygui_SOURCE_DIR}/styles"
         PRIVATE include
 )

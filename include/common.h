@@ -22,12 +22,21 @@ typedef int64_t i64;
 // Game state data
 // ----------------------------------------------------------------------------
 
+typedef enum GameScreen {
+    TITLE = 0,
+    GAMEPLAY,
+    CREDITS,
+} GameScreen;
+
+
 typedef struct State {
     struct Window {
         int width;
         int height;
         char* title;
     } window;
+
+    GameScreen current_screen;
 
     Camera2D camera;
     RenderTexture render_texture;

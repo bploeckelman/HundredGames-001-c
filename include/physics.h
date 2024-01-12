@@ -25,7 +25,7 @@ void InitPhysics(struct Window window);
 
 void UpdatePhysics();
 
-void DebugDrawPhysics();
+void DrawPhysicsDebug();
 
 void ClosePhysics();
 

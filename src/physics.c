@@ -105,7 +105,7 @@ void UpdatePhysics() {
     }
 }
 
-void DebugDrawPhysics() {
+void DrawPhysicsDebug() {
     b2World_Draw(physics.world, &physics_debug_draw);
 }
 
