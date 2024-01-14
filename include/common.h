@@ -28,7 +28,6 @@ typedef enum GameScreen {
     CREDITS,
 } GameScreen;
 
-
 typedef struct State {
     struct Window {
         int width;
@@ -41,5 +40,10 @@ typedef struct State {
     Camera2D camera;
     RenderTexture render_texture;
 } State;
+
+typedef struct Assets {
+    Texture2D ball_textures[4];
+    Texture2D paddle_textures[1];
+} Assets;
 
 #endif //PRONG_COMMON_H

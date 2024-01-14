@@ -18,6 +18,10 @@ static State state = {
     .current_screen = TITLE,
 };
 
+static Assets assets = {0};
+
+// ----------------------------------------------------------------------------
+
 static void Init();
 
 static void Update();
@@ -54,6 +58,14 @@ static void Init() {
 
     // init box2d
     InitPhysics(state.window);
+
+    // init assets
+    for (int i = 0; i < 4; i++) {
+        char path[64];
+        sprintf_s(path, sizeof(path), "data/ball-red_%d.png", i);
+        assets.ball_textures[i] = LoadTexture(path);
+    }
+    assets.paddle_textures[0] = LoadTexture("data/paddle-red.png");
 
     // init game state
     state.camera = (Camera2D){
@@ -117,56 +129,89 @@ static void UpdateGameplay() {
 static void DrawFrame() {
     // draw world to render texture
     BeginTextureMode(state.render_texture);
-        ClearBackground(DARKGRAY);
+    ClearBackground(DARKGRAY);
 
-        BeginMode2D(state.camera);
-            switch (state.current_screen) {
-                case TITLE: {
-                    DrawText("Prong", 10, 10, 40, LIGHTGRAY);
+    BeginMode2D(state.camera);
+    switch (state.current_screen) {
+        case TITLE: {
+            DrawText("Prong", 10, 10, 40, LIGHTGRAY);
 
-                    const int button_width = 100;
-                    const int button_height = 50;
-                    const Rectangle button_rect = {
-                        (state.window.width - button_width) / 2,
-                        (state.window.height - button_height) / 2,
-                        button_width,
-                        button_height
-                    };
-                    if (GuiLabelButton(button_rect, GuiIconText(ICON_PLAYER_PLAY, "Play"))) {
-                        state.current_screen = GAMEPLAY;
-                    }
-                    break;
-                }
-                case GAMEPLAY: {
-                    DrawPhysicsDebug(); // NOTE - just debug physics drawing for now
-                    break;
-                }
-                case CREDITS: {
-                    DrawText("Credits", 10, 10, 40, LIGHTGRAY);
-                    break;
-                }
+            const int button_width = 100;
+            const int button_height = 50;
+            const Rectangle button_rect = {
+                (state.window.width - button_width) / 2,
+                (state.window.height - button_height) / 2,
+                button_width,
+                button_height
+            };
+            if (GuiLabelButton(button_rect, GuiIconText(ICON_PLAYER_PLAY, "Play"))) {
+                state.current_screen = GAMEPLAY;
             }
-        EndMode2D();
+            break;
+        }
+        case GAMEPLAY: {
+            const b2Vec2 pos = b2Body_GetPosition(physics.ball.body);
+            const b2Circle* ball = b2Shape_GetCircle(physics.ball.shape);
+            DrawTexturePro(
+                assets.ball_textures[0],
+                (Rectangle){0, 0, assets.ball_textures[0].width, assets.ball_textures[0].height},
+                (Rectangle){
+                    pos.x + ball->point.x - ball->radius,
+                    pos.y + ball->point.y - ball->radius,
+                    ball->radius * 2, ball->radius * 2
+                },
+                (Vector2){0, 0},
+                0.0f,
+                WHITE);
+
+            const b2Polygon* paddle = b2Shape_GetPolygon(physics.paddle.shape);
+            DrawTexturePro(
+                assets.paddle_textures[0],
+                (Rectangle){0, 0, assets.paddle_textures[0].width, assets.paddle_textures[0].height},
+                (Rectangle){
+                    paddle->vertices[0].x,
+                    paddle->vertices[0].y,
+                    paddle->vertices[2].x - paddle->vertices[0].x,
+                    paddle->vertices[2].y - paddle->vertices[0].y
+                },
+                (Vector2){0, 0},
+                0.0f,
+                WHITE);
+
+            DrawPhysicsDebug();
+            break;
+        }
+        case CREDITS: {
+            DrawText("Credits", 10, 10, 40, LIGHTGRAY);
+            break;
+        }
+    }
+    EndMode2D();
     EndTextureMode();
 
     // draw render texture to screen
     BeginDrawing();
-        ClearBackground(BLACK);
+    ClearBackground(BLACK);
 
-        // TODO - need to sort this out, I think its the UI that is flipped, gamescreen stuff isn't
-        const float flip_y = state.current_screen == GAMEPLAY ? 1.0f : -1.0f;
-        DrawTexturePro(
-            state.render_texture.texture,
-            (Rectangle){0, 0, state.render_texture.texture.width, flip_y * state.render_texture.texture.height},
-            (Rectangle){0, 0, state.window.width, state.window.height},
-            (Vector2){0, 0},
-            0.0f,
-            WHITE);
+    // TODO - need to sort this out, I think its the UI that is flipped, gamescreen stuff isn't
+    const float flip_y = state.current_screen == GAMEPLAY ? 1.0f : -1.0f;
+    DrawTexturePro(
+        state.render_texture.texture,
+        (Rectangle){0, 0, state.render_texture.texture.width, flip_y * state.render_texture.texture.height},
+        (Rectangle){0, 0, state.window.width, state.window.height},
+        (Vector2){0, 0},
+        0.0f,
+        WHITE);
     EndDrawing();
 }
 
 static void Shutdown() {
     UnloadRenderTexture(state.render_texture);
+
+    for (int i = 0; i < 4; i++) {
+        UnloadTexture(assets.ball_textures[i]);
+    }
+    UnloadTexture(assets.paddle_textures[0]);
 
     ClosePhysics();
 

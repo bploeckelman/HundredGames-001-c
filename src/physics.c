@@ -1,6 +1,7 @@
 #include "../include/physics.h"
 
 #include "raylib.h" // for debug drawing
+#include "../cmake-build-debug/_deps/box2d-src/src/shape.h"
 #include "box2d/debug_draw.h"
 
 // Public data ----------------------------------------------------------------
@@ -24,6 +25,27 @@ void InitPhysics(struct Window window) {
     b2WorldDef world_def = b2_defaultWorldDef;
     world_def.gravity = (b2Vec2){0, -100};
     physics.world = b2CreateWorld(&world_def);
+
+    // create physics bodies
+    b2BodyDef ball_body_def = b2_defaultBodyDef;
+    ball_body_def.type = b2_dynamicBody;
+    b2BodyDef paddle_body_def = b2_defaultBodyDef;
+    paddle_body_def.type = b2_staticBody;
+
+    physics.ball.body = b2CreateBody(physics.world, &ball_body_def);
+    physics.paddle.body = b2CreateBody(physics.world, &paddle_body_def);
+
+    b2Circle circle = {{0, 0}, 25};
+    b2ShapeDef shape = b2_defaultShapeDef;
+    shape.restitution = 0.95f;
+    shape.density = 0.1f;
+    physics.ball.shape = b2CreateCircleShape(physics.ball.body, &shape, &circle);
+
+    b2Polygon box = b2MakeBox(100, 20);
+    b2ShapeDef paddle = b2_defaultShapeDef;
+    paddle.restitution = 0.5f;
+    paddle.density = 1.0f;
+    physics.paddle.shape = b2CreatePolygonShape(physics.paddle.body, &paddle, &box);
 
     // create the physics bodies
     b2BodyDef ball_def = b2_defaultBodyDef;
@@ -148,12 +170,44 @@ static void PhysDrawPolygon(const b2Vec2* vertices, int vertexCount, b2Color col
 /// Draw a solid closed polygon provided in CCW order.
 static void PhysDrawSolidPolygon(const b2Vec2* vertices, int vertexCount, b2Color color, void* context) {
     // TODO - DrawTexturedPolygon is probably the least hassle way to do this, but we need a solid white pixel texture
+    const Color raylib_color = ConvertB2ColorToRaylib(color);
+    for (int i = 0; i < vertexCount - 1; ++i) {
+        DrawLine(
+            vertices[i].x,
+            vertices[i].y,
+            vertices[i + 1].x,
+            vertices[i + 1].y,
+            raylib_color);
+    }
+    // close it
+    DrawLine(
+        vertices[vertexCount - 1].x,
+        vertices[vertexCount - 1].y,
+        vertices[0].x,
+        vertices[0].y,
+        raylib_color);
 }
 
 /// Draw a rounded polygon provided in CCW order.
 static void DrawRoundedPolygon(const b2Vec2* vertices, int vertexCount, float radius, b2Color lineColor,
                                b2Color fillColor, void* context) {
     // TODO
+    const Color raylib_color = ConvertB2ColorToRaylib(lineColor);
+    for (int i = 0; i < vertexCount - 1; ++i) {
+        DrawLine(
+            vertices[i].x,
+            vertices[i].y,
+            vertices[i + 1].x,
+            vertices[i + 1].y,
+            raylib_color);
+    }
+    // close it
+    DrawLine(
+        vertices[vertexCount - 1].x,
+        vertices[vertexCount - 1].y,
+        vertices[0].x,
+        vertices[0].y,
+        raylib_color);
 }
 
 /// Draw a circle.
@@ -165,7 +219,8 @@ static void PhysDrawCircle(b2Vec2 center, float radius, b2Color color, void* con
 /// Draw a solid circle.
 /// TODO - not sure what 'axis' is for
 static void PhysDrawSolidCircle(b2Vec2 center, float radius, b2Vec2 axis, b2Color color, void* context) {
-    DrawCircle(center.x, center.y, radius, ConvertB2ColorToRaylib(color));
+    //DrawCircle(center.x, center.y, radius, ConvertB2ColorToRaylib(color));
+    DrawCircleLines(center.x, center.y, radius, ConvertB2ColorToRaylib(color));
 }
 
 /// Draw a capsule.
