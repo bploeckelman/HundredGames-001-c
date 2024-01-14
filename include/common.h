@@ -35,6 +35,11 @@ typedef struct State {
         char* title;
     } window;
 
+    struct Paddle {
+        Vector2 vel;
+    } paddle;
+
+    bool exit_requested;
     GameScreen current_screen;
 
     Camera2D camera;

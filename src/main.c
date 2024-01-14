@@ -15,6 +15,7 @@ static State state = {
         .height = 720,
         .title = "Prong"
     },
+    .exit_requested = false,
     .current_screen = TITLE,
 };
 
@@ -36,7 +37,7 @@ static void Shutdown();
 
 int main() {
     Init();
-    while (!WindowShouldClose()) {
+    while (!state.exit_requested) {
         Update();
         DrawFrame();
     }
@@ -103,6 +104,8 @@ static void Update() {
 
 static void UpdateGameplay() {
     // handle input
+    state.exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE);
+
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
         // what's with these scales? I wouldn't have thought it'd take this much to get the ball moving
         const float vel_x = GetRandomValue(0, 1) == 0 ? -500.0f : 500.0f;
@@ -112,9 +115,14 @@ static void UpdateGameplay() {
         b2Body_SetLinearVelocity(physics.bodies.ball, (b2Vec2){vel_x, vel_y});
     }
 
-    if (IsKeyReleased(KEY_ESCAPE)) {
-        state.current_screen = CREDITS;
-    }
+    // update paddle velocity based on user input
+    int dir = 0;
+    if      (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  dir = -1;
+    else if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) dir = 1;
+    const float speed = 30.0f;
+    state.paddle.vel.x = (dir == 0) ? 0 : state.paddle.vel.x + dir * speed;
+    b2Body_SetLinearVelocity(physics.paddle.body, (b2Vec2){state.paddle.vel.x, 0});
+    b2Body_SetAngularVelocity(physics.paddle.body, 0);
 
     // update systems
     UpdatePhysics();
@@ -141,8 +149,7 @@ static void DrawFrame() {
             const Rectangle button_rect = {
                 (state.window.width - button_width) / 2,
                 (state.window.height - button_height) / 2,
-                button_width,
-                button_height
+                button_width, button_height
             };
             if (GuiLabelButton(button_rect, GuiIconText(ICON_PLAYER_PLAY, "Play"))) {
                 state.current_screen = GAMEPLAY;
@@ -150,27 +157,28 @@ static void DrawFrame() {
             break;
         }
         case GAMEPLAY: {
-            const b2Vec2 pos = b2Body_GetPosition(physics.ball.body);
+            const b2Vec2 ball_pos = b2Body_GetPosition(physics.ball.body);
             const b2Circle* ball = b2Shape_GetCircle(physics.ball.shape);
             DrawTexturePro(
                 assets.ball_textures[0],
                 (Rectangle){0, 0, assets.ball_textures[0].width, assets.ball_textures[0].height},
                 (Rectangle){
-                    pos.x + ball->point.x - ball->radius,
-                    pos.y + ball->point.y - ball->radius,
+                    ball_pos.x + ball->point.x - ball->radius,
+                    ball_pos.y + ball->point.y - ball->radius,
                     ball->radius * 2, ball->radius * 2
                 },
                 (Vector2){0, 0},
                 0.0f,
                 WHITE);
 
+            const b2Vec2 paddle_pos = b2Body_GetPosition(physics.paddle.body);
             const b2Polygon* paddle = b2Shape_GetPolygon(physics.paddle.shape);
             DrawTexturePro(
                 assets.paddle_textures[0],
                 (Rectangle){0, 0, assets.paddle_textures[0].width, assets.paddle_textures[0].height},
                 (Rectangle){
-                    paddle->vertices[0].x,
-                    paddle->vertices[0].y,
+                    paddle_pos.x + paddle->vertices[0].x,
+                    paddle_pos.y + paddle->vertices[0].y,
                     paddle->vertices[2].x - paddle->vertices[0].x,
                     paddle->vertices[2].y - paddle->vertices[0].y
                 },
@@ -194,7 +202,7 @@ static void DrawFrame() {
     ClearBackground(BLACK);
 
     // TODO - need to sort this out, I think its the UI that is flipped, gamescreen stuff isn't
-    const float flip_y = state.current_screen == GAMEPLAY ? 1.0f : -1.0f;
+    const int flip_y = state.current_screen == GAMEPLAY ? 1 : -1;
     DrawTexturePro(
         state.render_texture.texture,
         (Rectangle){0, 0, state.render_texture.texture.width, flip_y * state.render_texture.texture.height},

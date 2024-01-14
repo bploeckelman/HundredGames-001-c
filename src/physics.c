@@ -1,7 +1,6 @@
 #include "../include/physics.h"
 
 #include "raylib.h" // for debug drawing
-#include "../cmake-build-debug/_deps/box2d-src/src/shape.h"
 #include "box2d/debug_draw.h"
 
 // Public data ----------------------------------------------------------------
@@ -30,7 +29,10 @@ void InitPhysics(struct Window window) {
     b2BodyDef ball_body_def = b2_defaultBodyDef;
     ball_body_def.type = b2_dynamicBody;
     b2BodyDef paddle_body_def = b2_defaultBodyDef;
-    paddle_body_def.type = b2_staticBody;
+    paddle_body_def.type = b2_dynamicBody;
+    paddle_body_def.fixedRotation = true;
+    paddle_body_def.enableSleep = false;
+    paddle_body_def.gravityScale = 0.0f;
 
     physics.ball.body = b2CreateBody(physics.world, &ball_body_def);
     physics.paddle.body = b2CreateBody(physics.world, &paddle_body_def);
@@ -43,8 +45,7 @@ void InitPhysics(struct Window window) {
 
     b2Polygon box = b2MakeBox(100, 20);
     b2ShapeDef paddle = b2_defaultShapeDef;
-    paddle.restitution = 0.5f;
-    paddle.density = 1.0f;
+    paddle.density = 20.0f;
     physics.paddle.shape = b2CreatePolygonShape(physics.paddle.body, &paddle, &box);
 
     // create the physics bodies
