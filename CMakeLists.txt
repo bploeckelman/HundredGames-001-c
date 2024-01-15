@@ -32,12 +32,21 @@ FetchContent_Declare(raygui
         GIT_PROGRESS TRUE)
 FetchContent_MakeAvailable(raygui)
 
+# stb single-file libraries
+FetchContent_Declare(stb
+        GIT_REPOSITORY https://github.com/nothings/stb.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+FetchContent_MakeAvailable(stb)
+
 
 ### Build and Link ------------------------------------------------------------
 
 add_executable(${PROJECT_NAME}
         src/main.c
         include/common.h
+        include/game.h
 )
 #set(raylib_VERBOSE 1)
 
@@ -45,6 +54,7 @@ target_include_directories(${PROJECT_NAME}
         PRIVATE "${raygui_SOURCE_DIR}/src"
         PRIVATE "${raygui_SOURCE_DIR}/icons"
         PRIVATE "${raygui_SOURCE_DIR}/styles"
+        PRIVATE "${stb_SOURCE_DIR}"
         PRIVATE include
 )
 

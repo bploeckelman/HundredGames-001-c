@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include "common.h"
 
 #include "raylib.h"
 
@@ -6,9 +6,15 @@
 #include "raygui.h"
 #include "dark/style_dark.h"
 
-#include "common.h"
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
 
-static State state = {
+#include "game.h"
+
+// ----------------------------------------------------------------------------
+// global state
+
+global State state = {
     .window = {
         .width = 1280,
         .height = 720,
@@ -18,21 +24,10 @@ static State state = {
     .current_screen = TITLE,
 };
 
-static Assets assets = {0};
+global Assets assets = {0};
 
 // ----------------------------------------------------------------------------
-
-static void Init();
-
-static void Update();
-
-static void UpdateGameplay();
-
-static void DrawFrame();
-
-static void Shutdown();
-
-// ----------------------------------------------------------------------------
+// entry point
 
 int main() {
     Init();
@@ -45,8 +40,9 @@ int main() {
 }
 
 // ----------------------------------------------------------------------------
+// implementations
 
-static void Init() {
+internal void Init() {
     // init raylib
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(state.window.width, state.window.height, state.window.title);
@@ -57,24 +53,47 @@ static void Init() {
     GuiLoadStyleDark();
 
     // init assets
-    for (int i = 0; i < 4; i++) {
-        char path[64];
-        sprintf_s(path, sizeof(path), "data/ball-red_%d.png", i);
-        assets.ball_textures[i] = LoadTexture(path);
-    }
-    assets.paddle_textures[0] = LoadTexture("data/paddle-red.png");
+    LoadAssets();
 
     // init game state
+    state.render_texture = LoadRenderTexture(state.window.width, state.window.height);
     state.camera = (Camera2D){
         .target = (Vector2){0.0f, 0.0f},
         .offset = (Vector2){0.0f, 0.0f},
         .rotation = 0.0f,
         .zoom = 1.0f
     };
-    state.render_texture = LoadRenderTexture(state.window.width, state.window.height);
+
+    state.entities.ball = (Ball){
+        .pos = (Vector2){0, 100},
+        .vel = (Vector2){0, 0},
+        .anim = (Animation){
+            .frame_count = 0,
+            .frames_per_sec = 6,
+            .textures = assets.ball_textures
+        },
+        .tex_index = 0,
+        .radius = 25
+    };
+
+    const Vector2 paddle_size = {200, 50};
+    state.entities.paddle = (Paddle){
+        .rect = (Rectangle){
+            -paddle_size.x / 2,
+            (-state.window.height + paddle_size.y) / 2,
+            paddle_size.x, paddle_size.y
+        },
+        .vel = (Vector2){0, 0},
+        .anim = (Animation){
+            .frame_count = 0,
+            .frames_per_sec = 1,
+            .textures = assets.paddle_textures
+        },
+        .tex_index = 0
+    };
 }
 
-static void Update() {
+internal void Update() {
     switch (state.current_screen) {
         case TITLE: {
             if (IsKeyReleased(KEY_ENTER) ||
@@ -98,9 +117,46 @@ static void Update() {
     }
 }
 
-static void UpdateGameplay() {
+internal void UpdateGameplay() {
+    const f32 dt = GetFrameTime();
+
     // handle input
     state.exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE);
+    const bool left_down = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A);
+    const bool right_down = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D);
+
+    // update animations
+    Ball *ball = &state.entities.ball;
+    ball->anim.frame_count++;
+    if (ball->anim.frame_count >= (60 / ball->anim.frames_per_sec)) {
+        ball->anim.frame_count = 0;
+        ball->tex_index = (ball->tex_index + 1) % arrlen(ball->anim.textures);
+    }
+
+    Paddle *paddle = &state.entities.paddle;
+    paddle->anim.frame_count++;
+    if (paddle->anim.frame_count >= (60 / paddle->anim.frames_per_sec)) {
+        paddle->anim.frame_count = 0;
+        paddle->tex_index = (paddle->tex_index + 1) % arrlen(paddle->anim.textures);
+    }
+
+    // update entities
+    ball->rect = (Rectangle){
+            ball->pos.x - ball->radius,
+            ball->pos.y - ball->radius,
+            ball->radius * 2, ball->radius * 2};
+
+    const f32 speed = 500;
+    const i32 sign = left_down ? -1 : right_down ? 1 : 0;
+    paddle->vel.x = sign * speed * dt;
+    paddle->rect.x += paddle->vel.x;
+
+    // constrain entities
+    paddle->rect.x = Clamp(
+            -state.window.width / 2,
+            paddle->rect.x,
+            (state.window.width / 2) - paddle->rect.width
+    );
 
     // update camera
     state.camera.target = (Vector2){0, 0};
@@ -109,7 +165,7 @@ static void UpdateGameplay() {
     state.camera.zoom = 1.0f;
 }
 
-static void DrawFrame() {
+internal void DrawFrame() {
     // draw world to render texture
     BeginTextureMode(state.render_texture);
     ClearBackground(DARKGRAY);
@@ -132,28 +188,19 @@ static void DrawFrame() {
             break;
         }
         case GAMEPLAY: {
-            const Vector2 ball_pos = {0, 100};
-            const float ball_radius = 25;
-            DrawTexturePro(
-                assets.ball_textures[0],
-                (Rectangle){0, 0, assets.ball_textures[0].width, assets.ball_textures[0].height},
-                (Rectangle){
-                    ball_pos.x - ball_radius,
-                    ball_pos.y - ball_radius,
-                    ball_radius * 2, ball_radius * 2
-                },
-                (Vector2){0, 0},
-                0.0f,
-                WHITE);
+            Texture2D texture;
+            Rectangle texture_rect;
+            const Vector2 origin = {0, 0};
 
-            Vector2 paddle_size = {assets.paddle_textures[0].width, assets.paddle_textures[0].height};
-            DrawTexturePro(
-                assets.paddle_textures[0],
-                (Rectangle){0, 0, paddle_size.x, paddle_size.y},
-                (Rectangle){-paddle_size.x / 2, -state.window.height / 2, paddle_size.x, paddle_size.y},
-                (Vector2){0, 0},
-                0.0f,
-                WHITE);
+            const Ball ball = state.entities.ball;
+            texture = ball.anim.textures[ball.tex_index];
+            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
+            DrawTexturePro(texture, texture_rect, ball.rect, origin, 0.0f, WHITE);
+
+            const Paddle paddle = state.entities.paddle;
+            texture = paddle.anim.textures[paddle.tex_index];
+            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
+            DrawTexturePro(texture, texture_rect, paddle.rect, origin, 0.0f, WHITE);
             break;
         }
         case CREDITS: {
@@ -180,13 +227,31 @@ static void DrawFrame() {
     EndDrawing();
 }
 
-static void Shutdown() {
+internal void Shutdown() {
     UnloadRenderTexture(state.render_texture);
+    UnloadAssets();
+    CloseWindow();
+}
 
-    UnloadTexture(assets.paddle_textures[0]);
+internal void LoadAssets() {
+    arrput(assets.paddle_textures, LoadTexture("data/paddle-red.png"));
+
     for (int i = 0; i < 4; i++) {
+        char path[64];
+        sprintf_s(path, sizeof(path), "data/ball-red_%d.png", i);
+        Texture2D texture = LoadTexture(path);
+        arrput(assets.ball_textures, texture);
+    }
+}
+
+internal void UnloadAssets() {
+    for (int i = 0; i < arrlen(assets.paddle_textures); i++) {
+        UnloadTexture(assets.paddle_textures[i]);
+    }
+    arrfree(assets.paddle_textures);
+
+    for (int i = 0; i < arrlen(assets.ball_textures); i++) {
         UnloadTexture(assets.ball_textures[i]);
     }
-
-    CloseWindow();
+    arrfree(assets.ball_textures);
 }
