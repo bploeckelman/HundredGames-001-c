@@ -6,8 +6,7 @@
 #include "raygui.h"
 #include "dark/style_dark.h"
 
-#include "../include/common.h"
-#include "../include/physics.h"
+#include "common.h"
 
 static State state = {
     .window = {
@@ -57,9 +56,6 @@ static void Init() {
     // init raygui
     GuiLoadStyleDark();
 
-    // init box2d
-    InitPhysics(state.window);
-
     // init assets
     for (int i = 0; i < 4; i++) {
         char path[64];
@@ -106,27 +102,6 @@ static void UpdateGameplay() {
     // handle input
     state.exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE);
 
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        // what's with these scales? I wouldn't have thought it'd take this much to get the ball moving
-        const float vel_x = GetRandomValue(0, 1) == 0 ? -500.0f : 500.0f;
-        const float vel_y = 1000.0f;
-
-        b2Body_Wake(physics.bodies.ball);
-        b2Body_SetLinearVelocity(physics.bodies.ball, (b2Vec2){vel_x, vel_y});
-    }
-
-    // update paddle velocity based on user input
-    int dir = 0;
-    if      (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  dir = -1;
-    else if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) dir = 1;
-    const float speed = 30.0f;
-    state.paddle.vel.x = (dir == 0) ? 0 : state.paddle.vel.x + dir * speed;
-    b2Body_SetLinearVelocity(physics.paddle.body, (b2Vec2){state.paddle.vel.x, 0});
-    b2Body_SetAngularVelocity(physics.paddle.body, 0);
-
-    // update systems
-    UpdatePhysics();
-
     // update camera
     state.camera.target = (Vector2){0, 0};
     state.camera.offset = (Vector2){state.window.width / 2, state.window.height / 2};
@@ -144,8 +119,8 @@ static void DrawFrame() {
         case TITLE: {
             DrawText("Prong", 10, 10, 40, LIGHTGRAY);
 
-            const int button_width = 100;
-            const int button_height = 50;
+            const float button_width = 100;
+            const float button_height = 50;
             const Rectangle button_rect = {
                 (state.window.width - button_width) / 2,
                 (state.window.height - button_height) / 2,
@@ -157,36 +132,28 @@ static void DrawFrame() {
             break;
         }
         case GAMEPLAY: {
-            const b2Vec2 ball_pos = b2Body_GetPosition(physics.ball.body);
-            const b2Circle* ball = b2Shape_GetCircle(physics.ball.shape);
+            const Vector2 ball_pos = {0, 100};
+            const float ball_radius = 25;
             DrawTexturePro(
                 assets.ball_textures[0],
                 (Rectangle){0, 0, assets.ball_textures[0].width, assets.ball_textures[0].height},
                 (Rectangle){
-                    ball_pos.x + ball->point.x - ball->radius,
-                    ball_pos.y + ball->point.y - ball->radius,
-                    ball->radius * 2, ball->radius * 2
+                    ball_pos.x - ball_radius,
+                    ball_pos.y - ball_radius,
+                    ball_radius * 2, ball_radius * 2
                 },
                 (Vector2){0, 0},
                 0.0f,
                 WHITE);
 
-            const b2Vec2 paddle_pos = b2Body_GetPosition(physics.paddle.body);
-            const b2Polygon* paddle = b2Shape_GetPolygon(physics.paddle.shape);
+            Vector2 paddle_size = {assets.paddle_textures[0].width, assets.paddle_textures[0].height};
             DrawTexturePro(
                 assets.paddle_textures[0],
-                (Rectangle){0, 0, assets.paddle_textures[0].width, assets.paddle_textures[0].height},
-                (Rectangle){
-                    paddle_pos.x + paddle->vertices[0].x,
-                    paddle_pos.y + paddle->vertices[0].y,
-                    paddle->vertices[2].x - paddle->vertices[0].x,
-                    paddle->vertices[2].y - paddle->vertices[0].y
-                },
+                (Rectangle){0, 0, paddle_size.x, paddle_size.y},
+                (Rectangle){-paddle_size.x / 2, -state.window.height / 2, paddle_size.x, paddle_size.y},
                 (Vector2){0, 0},
                 0.0f,
                 WHITE);
-
-            DrawPhysicsDebug();
             break;
         }
         case CREDITS: {
@@ -216,12 +183,10 @@ static void DrawFrame() {
 static void Shutdown() {
     UnloadRenderTexture(state.render_texture);
 
+    UnloadTexture(assets.paddle_textures[0]);
     for (int i = 0; i < 4; i++) {
         UnloadTexture(assets.ball_textures[i]);
     }
-    UnloadTexture(assets.paddle_textures[0]);
-
-    ClosePhysics();
 
     CloseWindow();
 }
