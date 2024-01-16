@@ -12,10 +12,11 @@
 #include "game.h"
 
 // ----------------------------------------------------------------------------
-// global state
+// Global data
 
 global State state = {
     .window = {
+        .target_fps = 60,
         .width = 1280,
         .height = 720,
         .title = "Prong"
@@ -27,7 +28,7 @@ global State state = {
 global Assets assets = {0};
 
 // ----------------------------------------------------------------------------
-// entry point
+// Entry point
 
 int main() {
     Init();
@@ -40,13 +41,13 @@ int main() {
 }
 
 // ----------------------------------------------------------------------------
-// implementations
+// Lifecycle functions
 
 internal void Init() {
     // init raylib
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(state.window.width, state.window.height, state.window.title);
-    SetTargetFPS(60);
+    SetTargetFPS(state.window.target_fps);
     SetExitKey(KEY_NULL); // unbind ESC to exit
 
     // init raygui
@@ -55,8 +56,9 @@ internal void Init() {
     // init assets
     LoadAssets();
 
-    // init game state
+    // init game data
     state.render_texture = LoadRenderTexture(state.window.width, state.window.height);
+
     state.camera = (Camera2D){
         .target = (Vector2){0.0f, 0.0f},
         .offset = (Vector2){0.0f, 0.0f},
@@ -64,32 +66,26 @@ internal void Init() {
         .zoom = 1.0f
     };
 
+    const Vector2 ball_pos = {0, 100};
+    const Vector2 ball_vel = {0, -500};
+    const i32 ball_radius = 25;
     state.entities.ball = (Ball){
-        .pos = (Vector2){0, 100},
-        .vel = (Vector2){0, 0},
-        .anim = (Animation){
-            .frame_count = 0,
-            .frames_per_sec = 6,
-            .textures = assets.ball_textures
-        },
-        .tex_index = 0,
-        .radius = 25
+        .radius = ball_radius,
+        .pos = ball_pos,
+        .vel = ball_vel,
+        .rect = (Rectangle){ball_pos.x - ball_radius, ball_pos.y - ball_radius, ball_radius * 2, ball_radius * 2},
+        .anim = LoadAnimation(6, assets.ball_textures),
     };
 
     const Vector2 paddle_size = {200, 50};
     state.entities.paddle = (Paddle){
+        .vel = (Vector2){0, 0},
         .rect = (Rectangle){
             -paddle_size.x / 2,
             (-state.window.height + paddle_size.y) / 2,
             paddle_size.x, paddle_size.y
         },
-        .vel = (Vector2){0, 0},
-        .anim = (Animation){
-            .frame_count = 0,
-            .frames_per_sec = 1,
-            .textures = assets.paddle_textures
-        },
-        .tex_index = 0
+        .anim = LoadAnimation(1, assets.paddle_textures),
     };
 }
 
@@ -125,38 +121,58 @@ internal void UpdateGameplay() {
     const bool left_down = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A);
     const bool right_down = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D);
 
-    // update animations
-    Ball *ball = &state.entities.ball;
-    ball->anim.frame_count++;
-    if (ball->anim.frame_count >= (60 / ball->anim.frames_per_sec)) {
-        ball->anim.frame_count = 0;
-        ball->tex_index = (ball->tex_index + 1) % arrlen(ball->anim.textures);
-    }
-
-    Paddle *paddle = &state.entities.paddle;
-    paddle->anim.frame_count++;
-    if (paddle->anim.frame_count >= (60 / paddle->anim.frames_per_sec)) {
-        paddle->anim.frame_count = 0;
-        paddle->tex_index = (paddle->tex_index + 1) % arrlen(paddle->anim.textures);
-    }
-
     // update entities
-    ball->rect = (Rectangle){
-            ball->pos.x - ball->radius,
-            ball->pos.y - ball->radius,
-            ball->radius * 2, ball->radius * 2};
+    Ball *ball = &state.entities.ball;
+    Paddle *paddle = &state.entities.paddle;
 
+    UpdateAnimation(&ball->anim);
+    UpdateAnimation(&paddle->anim);
+
+    const i32 screen_left   = -state.window.width / 2;
+    const i32 screen_right  =  state.window.width / 2;
+    const i32 screen_bottom = -state.window.height / 2;
+    const i32 screen_top    =  state.window.height / 2;
+
+    // move the paddle based on user input, and constrain it to the screen bounds
     const f32 speed = 500;
     const i32 sign = left_down ? -1 : right_down ? 1 : 0;
     paddle->vel.x = sign * speed * dt;
     paddle->rect.x += paddle->vel.x;
+    paddle->rect.x = Clamp(screen_left, paddle->rect.x, screen_right - paddle->rect.width);
 
-    // constrain entities
-    paddle->rect.x = Clamp(
-            -state.window.width / 2,
-            paddle->rect.x,
-            (state.window.width / 2) - paddle->rect.width
-    );
+    // move the ball and update its bounds
+    ball->pos.x += ball->vel.x * dt;
+    ball->pos.y += ball->vel.y * dt;
+    ball->rect.x = ball->pos.x - ball->radius;
+    ball->rect.y = ball->pos.y - ball->radius;
+
+    // clamp the ball to the screen, and bounce it if it hits the edge
+    if (ball->rect.x < screen_left) {
+        ball->rect.x = screen_left;
+        ball->pos.x = ball->rect.x + ball->radius;
+        ball->vel.x *= -1;
+    } else if (ball->rect.x + ball->rect.width > screen_right) {
+        ball->rect.x = screen_right - ball->rect.width;
+        ball->pos.x = ball->rect.x + ball->radius;
+        ball->vel.x *= -1;
+    }
+
+    if (ball->rect.y < screen_bottom) {
+        ball->rect.y = screen_bottom;
+        ball->pos.y = ball->rect.y + ball->radius;
+        ball->vel.y *= -1;
+    } else if (ball->rect.y + ball->rect.height > screen_top) {
+        ball->rect.y = screen_top - ball->rect.height;
+        ball->pos.y = ball->rect.y + ball->radius;
+        ball->vel.y *= -1;
+    }
+
+    // test for collision with paddle and respond
+    // TODO - this needs to check against each edge rather than the simple 'did they touch' test,
+    //        or if there's a circle-rect test that outputs the collision normal, that could be used instead
+    if (CheckCollisionCircleRec(ball->pos, ball->radius, paddle->rect)) {
+        ball->vel.y *= -1;
+    }
 
     // update camera
     state.camera.target = (Vector2){0, 0};
@@ -193,12 +209,12 @@ internal void DrawFrame() {
             const Vector2 origin = {0, 0};
 
             const Ball ball = state.entities.ball;
-            texture = ball.anim.textures[ball.tex_index];
+            texture = GetAnimationKeyframe(ball.anim);
             texture_rect = (Rectangle){0, 0, texture.width, texture.height};
             DrawTexturePro(texture, texture_rect, ball.rect, origin, 0.0f, WHITE);
 
             const Paddle paddle = state.entities.paddle;
-            texture = paddle.anim.textures[paddle.tex_index];
+            texture = GetAnimationKeyframe(paddle.anim);
             texture_rect = (Rectangle){0, 0, texture.width, texture.height};
             DrawTexturePro(texture, texture_rect, paddle.rect, origin, 0.0f, WHITE);
             break;
@@ -233,6 +249,9 @@ internal void Shutdown() {
     CloseWindow();
 }
 
+// ----------------------------------------------------------------------------
+// Asset functions
+
 internal void LoadAssets() {
     arrput(assets.paddle_textures, LoadTexture("data/paddle-red.png"));
 
@@ -254,4 +273,30 @@ internal void UnloadAssets() {
         UnloadTexture(assets.ball_textures[i]);
     }
     arrfree(assets.ball_textures);
+}
+
+// ----------------------------------------------------------------------------
+// Animation functions
+
+internal Animation LoadAnimation(u32 frames_per_sec, Texture2D *textures) {
+    return (Animation){
+        .frames_per_sec = frames_per_sec,
+        .frames_elapsed = 0,
+        .current_texture = 0,
+        .textures = textures
+    };
+}
+
+internal Texture2D GetAnimationKeyframe(Animation anim) {
+    return anim.textures[anim.current_texture];
+}
+
+internal void UpdateAnimation(Animation *anim) {
+    const i32 next_texture = (state.window.target_fps / anim->frames_per_sec);
+
+    anim->frames_elapsed++;
+    if (anim->frames_elapsed >= next_texture) {
+        anim->frames_elapsed -= next_texture;
+        anim->current_texture = (anim->current_texture + 1) % arrlen(anim->textures);
+    }
 }

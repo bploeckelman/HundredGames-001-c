@@ -27,28 +27,31 @@ typedef enum GameScreen {
 // Helpers
 
 typedef struct {
-    u64 frame_count;
-    float frames_per_sec;
+    u32 frames_per_sec;
+    u32 frames_elapsed;
+    i32 current_texture;
     Texture2D *textures;
 } Animation;
+
+Animation LoadAnimation(u32 frames_per_sec, Texture2D *textures);
+Texture2D GetAnimationKeyframe(Animation anim);
+void UpdateAnimation(Animation *anim);
 
 // ----------------------------------------------------------------------------
 // Game objects
 
 typedef struct {
+    f32 radius;
     Vector2 pos;
     Vector2 vel;
     Rectangle rect;
     Animation anim;
-    i32 tex_index;
-    f32 radius;
 } Ball;
 
 typedef struct {
-    Rectangle rect;
     Vector2 vel;
+    Rectangle rect;
     Animation anim;
-    i32 tex_index;
 } Paddle;
 
 // ----------------------------------------------------------------------------
@@ -56,8 +59,9 @@ typedef struct {
 
 typedef struct {
     struct Window {
-        int width;
-        int height;
+        i32 target_fps;
+        i32 width;
+        i32 height;
         char* title;
     } window;
 
@@ -72,7 +76,6 @@ typedef struct {
     Camera2D camera;
     RenderTexture render_texture;
 } State;
-
 
 // ----------------------------------------------------------------------------
 // Assets
