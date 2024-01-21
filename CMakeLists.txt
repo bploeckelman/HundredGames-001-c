@@ -4,7 +4,11 @@ project(100games_001_prong
         DESCRIPTION "100 games #001: prong"
         HOMEPAGE_URL "https://lando.systems"
         LANGUAGES C)
+
 include(FetchContent)
+
+
+### Set variables -------------------------------------------------------------
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # generate compile_commands.json
 set(CMAKE_C_STANDARD 11)
@@ -12,7 +16,7 @@ set(CMAKE_C_STANDARD 11)
 set(DATA_DIR "${CMAKE_SOURCE_DIR}/data")
 
 
-### Dependencies --------------------------------------------------------------
+### Fetch dependencies --------------------------------------------------------
 
 # raylib
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) # don't build the supplied examples
@@ -43,22 +47,10 @@ FetchContent_MakeAvailable(stb)
 
 ### Build and Link ------------------------------------------------------------
 
-add_executable(${PROJECT_NAME}
-        src/main.c
-        include/common.h
-        include/game.h
-)
-#set(raylib_VERBOSE 1)
+# build the executable
+add_executable(${PROJECT_NAME} src/main.c)
 
-target_include_directories(${PROJECT_NAME}
-        PRIVATE "${raygui_SOURCE_DIR}/src"
-        PRIVATE "${raygui_SOURCE_DIR}/icons"
-        PRIVATE "${raygui_SOURCE_DIR}/styles"
-        PRIVATE "${stb_SOURCE_DIR}"
-        PRIVATE include
-)
-
-# link raylib
+# link libraries, raygui and stb are header-only so don't need to be linked
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 
 # link mac frameworks if needed
@@ -67,3 +59,13 @@ if (APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE "-framework Cocoa")
     target_link_libraries(${PROJECT_NAME} PRIVATE "-framework OpenGL")
 endif()
+
+### Include search paths ------------------------------------------------------
+
+target_include_directories(${PROJECT_NAME}
+        PRIVATE include/
+        PRIVATE "${raygui_SOURCE_DIR}/src"
+        PRIVATE "${raygui_SOURCE_DIR}/icons"
+        PRIVATE "${raygui_SOURCE_DIR}/styles"
+        PRIVATE "${stb_SOURCE_DIR}"
+)
