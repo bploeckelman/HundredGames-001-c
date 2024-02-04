@@ -323,7 +323,7 @@ internal void UpdateAnimation(Animation *anim) {
 // ----------------------------------------------------------------------------
 // Component functions
 
-internal bool CheckForCollisions(Collider *collider, Vector2 offset) {
+internal EntityID CheckForCollisions(Collider *collider, Vector2 offset) {
     if (!collider || collider->mask == MASK_NONE) return false;
 
     for (i32 i = 0; i < arrlen(state.world.colliders); i++) {
@@ -332,10 +332,10 @@ internal bool CheckForCollisions(Collider *collider, Vector2 offset) {
         bool is_different  = collider != other;
         bool collides_with = collider->collides_with | other->mask;
         if (is_different && collides_with && CollidersOverlap(collider, other, offset)) {
-            return true;
+            return other->entity_id;
         }
     }
-    return false;
+    return ENTITY_ID_NONE;
 }
 
 internal bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset) {
@@ -394,9 +394,10 @@ internal bool MoveX(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
             // check for potential collision before moving this pixel
-            if (CheckForCollisions(collider, (Vector2) {sign, 0})) {
+            EntityID collided_with = CheckForCollisions(collider, (Vector2) {sign, 0});
+            if (collided_with != ENTITY_ID_NONE) {
                 if (mover->on_hit_x) {
-                    mover->on_hit_x(mover);
+                    mover->on_hit_x(mover, collided_with);
                 } else {
                     // stop
                     mover->vel.x = 0;
@@ -429,9 +430,10 @@ internal bool MoveY(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
             // check for potential collision before moving this pixel
-            if (CheckForCollisions(collider, (Vector2) {0, sign})) {
+            EntityID collided_with = CheckForCollisions(collider, (Vector2) {0, sign});
+            if (collided_with != ENTITY_ID_NONE) {
                 if (mover->on_hit_y) {
-                    mover->on_hit_y(mover);
+                    mover->on_hit_y(mover, collided_with);
                 } else {
                     // stop
                     mover->vel.y = 0;
@@ -497,16 +499,31 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
 
 internal const f32 perturbation_scale = 50.f;
 
-internal void BallHitX(Mover *self) {
+internal void BallHitX(Mover *self, EntityID collided_with_id) {
     self->vel.x *= -1;
-    self->vel.y += calc_signed_random() * perturbation_scale;
     self->remainder.x = 0;
+
+    // if the thing we hit was a paddle, impart some of its velocity to the ball
+    if (collided_with_id == state.entities.paddle.entity_id) {
+        const f32 speed_transmit_scale = 0.5f;
+        if (state.entities.paddle.mover.vel.x != 0) {
+            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
+        }
+    }
 }
 
-internal void BallHitY(Mover *self) {
+internal void BallHitY(Mover *self, EntityID collided_with_id) {
     self->vel.y *= -1;
     self->vel.x += calc_signed_random() * perturbation_scale;
     self->remainder.y = 0;
+
+    // if the thing we hit was a paddle, impart some of its velocity to the ball
+    if (collided_with_id == state.entities.paddle.entity_id) {
+        const f32 speed_transmit_scale = 0.5f;
+        if (state.entities.paddle.mover.vel.x != 0) {
+            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
+        }
+    }
 }
 
 internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim) {
@@ -520,7 +537,7 @@ internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation an
                     .vel = vel,
                     .remainder = (Vector2){0, 0},
                     .gravity = GRAVITY,
-                    .friction = 0.5f,
+                    .friction = 0,
                     .on_hit_x = BallHitX,
                     .on_hit_y = BallHitY,
             },

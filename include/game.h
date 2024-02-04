@@ -76,7 +76,7 @@ void UpdateAnimation(Animation *anim);
 // Components
 
 typedef u32 EntityID;
-global const EntityID INVALID_ENTITY_ID = 0;
+global const EntityID ENTITY_ID_NONE = 0;
 global EntityID next_entity_id = 1;
 
 typedef struct {
@@ -117,11 +117,11 @@ struct Mover {
     Vector2 remainder;
     Vector2 gravity;
     f32 friction;
-    void (*on_hit_x)(Mover *self);
-    void (*on_hit_y)(Mover *self);
+    void (*on_hit_x)(Mover *self, EntityID collided_with_id);
+    void (*on_hit_y)(Mover *self, EntityID collided_with_id);
 };
 
-bool CheckForCollisions(Collider *collider, Vector2 offset);
+EntityID CheckForCollisions(Collider *collider, Vector2 offset);
 bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset);
 void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider);
 
