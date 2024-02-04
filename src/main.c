@@ -25,6 +25,10 @@ global State state = {
         .height = 720,
         .title = "Prong"
     },
+    .debug = {
+        .draw_colliders = true,
+        .manual_frame_step = false,
+    },
     .exit_requested = false,
     .current_screen = TITLE,
 };
@@ -115,16 +119,33 @@ internal void Update() {
     }
 }
 
+typedef struct {
+    bool move_left;
+    bool move_right;
+    bool step_frame;
+} InputFrame;
+global InputFrame input_frame = {0};
+
 internal void UpdateGameplay() {
     const f32 dt = GetFrameTime();
 
     // handle input
     state.exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE);
-    const bool left_down = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A);
-    const bool right_down = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D);
+    input_frame = (InputFrame){
+        .move_left = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A),
+        .move_right = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D),
+        .step_frame = IsKeyPressed(KEY_SPACE),
+    };
 
     if (IsKeyPressed(KEY_ONE)) {
+        state.debug.manual_frame_step = !state.debug.manual_frame_step;
+    }
+    if (IsKeyPressed(KEY_TWO)) {
         state.debug.draw_colliders = !state.debug.draw_colliders;
+    }
+
+    if (state.debug.manual_frame_step && !input_frame.step_frame) {
+        return;
     }
 
     // update entities
@@ -137,7 +158,7 @@ internal void UpdateGameplay() {
     // move the paddle based on user input and limit its speed
     const f32 speed_max = 2000;
     const f32 speed_impulse = 500;
-    const i32 sign = left_down ? -1 : right_down ? 1 : 0;
+    const i32 sign = input_frame.move_left ? -1 : input_frame.move_right ? 1 : 0;
     paddle->mover.vel.x += sign * speed_impulse * dt;
     if (calc_abs(paddle->mover.vel.x) > speed_max) {
         f32 scale = (sign != calc_sign(paddle->mover.vel.x)) ? 1.0f : 0.25f;
@@ -232,6 +253,9 @@ internal void DrawFrame() {
         (Vector2){0, 0},
         0.0f,
         WHITE);
+    if (state.debug.manual_frame_step) {
+        DrawText("frame step enabled", 10, 10, 20, input_frame.step_frame ? GREEN : WHITE);
+    }
     EndDrawing();
 }
 
@@ -333,6 +357,26 @@ internal bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset) {
     return false;
 }
 
+internal void UpdateColliderPos(Vector2 *pos, Collider *collider) {
+    if (collider) {
+        switch (collider->type) {
+            case SHAPE_CIRC: {
+                collider->shape.circle.center.x = pos->x;
+                collider->shape.circle.center.y = pos->y;
+                break;
+            }
+            case SHAPE_RECT: {
+                // position is center
+                collider->shape.rect.x = pos->x - collider->shape.rect.width / 2;
+                collider->shape.rect.y = pos->y - collider->shape.rect.height / 2;
+                break;
+            }
+            case SHAPE_NONE:
+            default: break;
+        }
+    }
+}
+
 internal bool MoveX(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) {
     if (collider) {
         i32 sign = calc_sign(amount);
@@ -356,10 +400,12 @@ internal bool MoveX(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
             // move a pixel
             amount -= sign;
             pos->x += sign;
+            UpdateColliderPos(pos, collider);
         }
     } else {
         // no collider, just move the full amount
         pos->x += amount;
+        UpdateColliderPos(pos, collider);
     }
 
     // didn't hit anything
@@ -389,10 +435,12 @@ internal bool MoveY(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
             // move a pixel
             amount -= sign;
             pos->y += sign;
+            UpdateColliderPos(pos, collider);
         }
     } else {
         // no collider, just move the full amount
         pos->y += amount;
+        UpdateColliderPos(pos, collider);
     }
 
     // didn't hit anything
@@ -422,45 +470,16 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
     f32 total_move_y = mover->remainder.y + mover->vel.y * dt;
 
     // round to nearest integer since we only move in whole pixels
-    i32 move_x = (total_move_x >= 0) ? floorf(total_move_x + 0.5f) : ceilf(total_move_x - 0.5f);
-    i32 move_y = (total_move_y >= 0) ? floorf(total_move_y + 0.5f) : ceilf(total_move_y - 0.5f);
+    i32 move_x = calc_round(total_move_x);
+    i32 move_y = calc_round(total_move_y);
 
     // save the remainder for next frame
     mover->remainder.x = total_move_x - move_x;
     mover->remainder.y = total_move_y - move_y;
 
-    if (mover->entity_id == state.entities.ball.entity_id) {
-        printf("[ball] pos: (%+04.1f, %+04.1f), vel: (%+04.2f, %+04.2f), total_move: (%+04.2f, %+04.2f), move: (%+04d, %+04d), rem: (%+04.2f, %+04.2f)\n",
-               state.entities.ball.pos.x,
-               state.entities.ball.pos.y,
-               mover->vel.x, mover->vel.y,
-               total_move_x, total_move_y,
-               move_x, move_y,
-               mover->remainder.x, mover->remainder.y);
-    }
-
-
     // move by integer values
     MoveX(pos, mover, collider, move_x);
     MoveY(pos, mover, collider, move_y);
-
-    // update collider once movement is complete
-    if (collider) {
-        switch (collider->type) {
-            case SHAPE_CIRC: {
-                collider->shape.circle.center.x = pos->x;
-                collider->shape.circle.center.y = pos->y;
-                break;
-            }
-            case SHAPE_RECT: {
-                // position is center
-                collider->shape.rect.x = pos->x - collider->shape.rect.width / 2;
-                collider->shape.rect.y = pos->y - collider->shape.rect.height / 2;
-                break;
-            }
-            default: break;
-        }
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -487,7 +506,7 @@ internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
                     .vel = vel,
                     .remainder = (Vector2){0, 0},
                     .gravity = GRAVITY,
-                    .friction = 0.1f,
+                    .friction = 0.5f,
                     .on_hit_x = BallHitX,
                     .on_hit_y = BallHitY,
             },
@@ -517,14 +536,14 @@ internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
                     .vel = {0, 0},
                     .remainder = {0, 0},
                     .gravity = {0, 0},
-                    .friction = 0.75f,
+                    .friction = 0.9f,
                     .on_hit_x = NULL,
                     .on_hit_y = NULL,
             },
             .collider = (Collider){
                     .entity_id = entity_id,
                     .mask = MASK_PADDLE,
-                    .collides_with = MASK_BALL | MASK_BOUNDS,
+                    .collides_with = MASK_BOUNDS,
                     .type = SHAPE_RECT,
                     .shape = {
                             .rect = {

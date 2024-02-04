@@ -174,6 +174,7 @@ typedef struct {
 
     struct Debug {
         bool draw_colliders;
+        bool manual_frame_step;
     } debug;
 
     struct Entities {
