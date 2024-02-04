@@ -24,7 +24,6 @@ global State state = {
         .draw_colliders = true,
         .manual_frame_step = false,
     },
-    .exit_requested = false,
     .current_screen = TITLE,
 };
 
@@ -33,7 +32,7 @@ global State state = {
 
 int main() {
     Init();
-    while (!state.exit_requested) {
+    while (!state.input_frame.exit_requested) {
         Update();
         DrawFrame();
     }
@@ -46,7 +45,7 @@ int main() {
 
 internal void Init() {
     // init raylib
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(state.window.width, state.window.height, state.window.title);
     SetTargetFPS(state.window.target_fps);
     SetExitKey(KEY_NULL); // unbind ESC to exit
@@ -60,19 +59,22 @@ internal void Init() {
     // init game data
     state.render_texture = LoadRenderTexture(state.window.width, state.window.height);
 
+    Vector2 window_center = {state.window.width / 2, state.window.height / 2};
     state.camera = (Camera2D){
         .target = (Vector2){0.0f, 0.0f},
-        .offset = (Vector2){state.window.width / 2, state.window.height / 2},
+        .offset = window_center,
         .rotation = 0.0f,
         .zoom = 1.0f
     };
 
+    Vector2 paddle_size = {200, 50};
+    Vector2 paddle_center = {0, (-state.window.height + paddle_size.y) / 2};
     state.entities = (struct Entities){
-        .ball = MakeBall((Vector2){0, 100}, (Vector2){0, -500}, 25, LoadAnimation(6, assets.ball_textures)),
-        .paddle = MakePaddle((Vector2){0, -state.window.height / 2 + 25}, (Vector2){200, 50}, LoadAnimation(1, assets.paddle_textures)),
+        .ball = MakeBall((Vector2){0, 100}, (Vector2){0, -200}, 25, LoadAnimation(6, assets.ball_textures)),
+        .paddle = MakePaddle(paddle_center, paddle_size, LoadAnimation(1, assets.paddle_textures)),
         .bounds = MakeArenaBounds((Rectangle) {
-                -state.window.width / 2,
-                -state.window.height / 2,
+                -window_center.x,
+                -window_center.y,
                 state.window.width,
                 state.window.height
         }),
@@ -114,32 +116,23 @@ internal void Update() {
     }
 }
 
-typedef struct {
-    bool move_left;
-    bool move_right;
-    bool step_frame;
-} InputFrame;
-global InputFrame input_frame = {0};
-
 internal void UpdateGameplay() {
     const f32 dt = GetFrameTime();
 
-    // handle input
-    state.exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE);
-    input_frame = (InputFrame){
-        .move_left = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A),
-        .move_right = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D),
-        .step_frame = IsKeyPressed(KEY_SPACE),
+    // collect input
+    state.input_frame = (struct InputFrame){
+            .exit_requested = WindowShouldClose() || IsKeyPressed(KEY_ESCAPE),
+            .move_left  = IsKeyDown(KEY_LEFT)  || IsKeyDown(KEY_A),
+            .move_right = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D),
+            .step_frame = IsKeyPressed(KEY_SPACE),
     };
 
-    if (IsKeyPressed(KEY_ONE)) {
-        state.debug.manual_frame_step = !state.debug.manual_frame_step;
-    }
-    if (IsKeyPressed(KEY_TWO)) {
-        state.debug.draw_colliders = !state.debug.draw_colliders;
-    }
+    // toggle debug flags if needed
+    if (IsKeyPressed(KEY_ONE)) state.debug.manual_frame_step = !state.debug.manual_frame_step;
+    if (IsKeyPressed(KEY_TWO)) state.debug.draw_colliders    = !state.debug.draw_colliders;
 
-    if (state.debug.manual_frame_step && !input_frame.step_frame) {
+    // if manual frame stepping is enabled, only update if the user has requested it
+    if (state.debug.manual_frame_step && !state.input_frame.step_frame) {
         return;
     }
 
@@ -151,18 +144,20 @@ internal void UpdateGameplay() {
     UpdateAnimation(&paddle->anim);
 
     // move the paddle based on user input and limit its speed
-    if (input_frame.move_left || input_frame.move_right) {
+    if (state.input_frame.move_left || state.input_frame.move_right) {
         const f32 speed_max = 2000;
         const f32 speed_impulse = 500;
-        const i32 sign = input_frame.move_left ? -1 : input_frame.move_right ? 1 : 0;
+        const i32 sign = state.input_frame.move_left ? -1 : state.input_frame.move_right ? 1 : 0;
 
-        // if the paddle is moving in the opposite direction, stop it immediately
-        if (sign != calc_sign(paddle->mover.vel.x)) {
+        // if the paddle is moving in the opposite direction, stop it
+        bool switch_direction = sign != calc_sign(paddle->mover.vel.x);
+        if (switch_direction) {
             paddle->mover.vel.x = 0;
         }
 
-        // move the paddle based on user input
-        paddle->mover.vel.x += sign * speed_impulse * dt;
+        // move the paddle based on user input, with an extra boost if we just switched direction
+        const f32 speed_boost = switch_direction ? 50 : 1;
+        paddle->mover.vel.x += sign * speed_boost * speed_impulse * dt;
 
         // constrain the paddle's max speed
         if (calc_abs(paddle->mover.vel.x) > speed_max) {
@@ -262,7 +257,7 @@ internal void DrawFrame() {
         0.0f,
         WHITE);
     if (state.debug.manual_frame_step) {
-        DrawText("frame step enabled", 10, 10, 20, input_frame.step_frame ? GREEN : WHITE);
+        DrawText("frame step enabled", 10, 10, 20, state.input_frame.step_frame ? GREEN : WHITE);
     }
     EndDrawing();
 }
@@ -348,18 +343,25 @@ internal bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset) {
     if (!a || !b) return false;
 
     // check for overlaps between each permutation of shape types
-    if (a->type == SHAPE_RECT) {
-        if (b->type == SHAPE_RECT) {
-            return rect_rect_overlap(a->shape.rect, b->shape.rect, offset);
-        } else if (b->type == SHAPE_CIRC) {
-            return circ_rect_overlaps(b->shape.circle, a->shape.rect, offset);
+    switch (a->type) {
+        case SHAPE_CIRC: {
+            switch (b->type) {
+                case SHAPE_CIRC: return circ_circ_overlaps(a->shape.circle, b->shape.circle, offset);
+                case SHAPE_RECT: return circ_rect_overlaps(a->shape.circle, b->shape.rect, offset);
+                case SHAPE_NONE:
+                default: break;
+            } break;
         }
-    } else if (a->type == SHAPE_CIRC) {
-        if (b->type == SHAPE_CIRC) {
-            return circ_circ_overlap(a->shape.circle, b->shape.circle, offset);
-        } else if (b->type == SHAPE_RECT) {
-            return circ_rect_overlaps(a->shape.circle, b->shape.rect, offset);
+        case SHAPE_RECT: {
+            switch (b->type) {
+                case SHAPE_RECT: return rect_rect_overlaps(a->shape.rect, b->shape.rect, offset);
+                case SHAPE_CIRC: return circ_rect_overlaps(b->shape.circle, a->shape.rect, offset);
+                case SHAPE_NONE:
+                default: break;
+            } break;
         }
+        case SHAPE_NONE:
+        default: break;
     }
 
     return false;
@@ -507,11 +509,11 @@ internal void BallHitY(Mover *self) {
     self->remainder.y = 0;
 }
 
-internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
+internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim) {
     EntityID entity_id = next_entity_id++;
     return (Ball){
             .entity_id = entity_id,
-            .pos = pos,
+            .pos = center_pos,
             .anim = anim,
             .mover = (Mover){
                     .entity_id = entity_id,
@@ -529,7 +531,7 @@ internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
                     .type = SHAPE_CIRC,
                     .shape = {
                             .circle = {
-                                    .center = pos,
+                                    .center = center_pos,
                                     .radius = radius,
                             },
                     },
@@ -537,11 +539,11 @@ internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
     };
 }
 
-internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
+internal Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim) {
     EntityID entity_id = next_entity_id++;
     return (Paddle){
             .entity_id = entity_id,
-            .pos = pos,
+            .pos = center_pos,
             .anim = anim,
             .mover = (Mover){
                     .entity_id = entity_id,
@@ -559,8 +561,8 @@ internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
                     .type = SHAPE_RECT,
                     .shape = {
                             .rect = {
-                                    -size.x / 2,
-                                    -size.y / 2,
+                                    center_pos.x - size.x / 2,
+                                    center_pos.y - size.y / 2,
                                     size.x, size.y
                             },
                     },

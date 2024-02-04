@@ -125,7 +125,7 @@ bool CheckForCollisions(Collider *collider, Vector2 offset);
 bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset);
 void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider);
 
-global inline bool rect_rect_overlap(Rectangle a, Rectangle b, Vector2 offset) {
+global inline bool rect_rect_overlaps(Rectangle a, Rectangle b, Vector2 offset) {
     Rectangle a_offset = { a.x + offset.x, a.y + offset.y, a.width, a.height };
     return CheckCollisionRecs(a_offset, b);
 }
@@ -135,7 +135,7 @@ global inline bool circ_rect_overlaps(Circle c, Rectangle r, Vector2 offset) {
     return CheckCollisionCircleRec(c_offset, c.radius, r);
 }
 
-global inline bool circ_circ_overlap(Circle a, Circle b, Vector2 offset) {
+global inline bool circ_circ_overlaps(Circle a, Circle b, Vector2 offset) {
     Vector2 a_offset = { a.center.x + offset.x, a.center.y + offset.y };
     return CheckCollisionCircles(a_offset, a.radius, b.center, b.radius);
 }
@@ -185,6 +185,13 @@ typedef struct {
         bool manual_frame_step;
     } debug;
 
+    struct InputFrame {
+        bool exit_requested;
+        bool move_left;
+        bool move_right;
+        bool step_frame;
+    } input_frame;
+
     struct Entities {
         Ball ball;
         Paddle paddle;
@@ -196,11 +203,9 @@ typedef struct {
         Collider **colliders;
     } world;
 
-    bool exit_requested;
     GameScreen current_screen;
-
-    Camera2D camera;
     RenderTexture render_texture;
+    Camera2D camera;
 } State;
 
 // ----------------------------------------------------------------------------
@@ -217,8 +222,8 @@ void UnloadAssets();
 // ----------------------------------------------------------------------------
 // Factory functions
 
-Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim);
-Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim);
+Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim);
+Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim);
 ArenaBounds MakeArenaBounds(Rectangle interior);
 
 #endif //PRONG_GAME_H
