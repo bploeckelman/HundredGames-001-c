@@ -67,6 +67,10 @@ void UpdateAnimation(Animation *anim);
 // ----------------------------------------------------------------------------
 // Components
 
+typedef u32 EntityID;
+global const EntityID INVALID_ENTITY_ID = 0;
+global EntityID next_entity_id = 1;
+
 typedef struct {
     Vector2 center;
     f32 radius;
@@ -88,7 +92,9 @@ typedef enum {
 } ShapeType;
 
 typedef struct {
+    EntityID entity_id;
     u32 mask;
+    u32 collides_with;
     ShapeType type;
     union {
         Circle circle;
@@ -98,6 +104,7 @@ typedef struct {
 
 typedef struct Mover Mover;
 struct Mover {
+    EntityID entity_id;
     Vector2 vel;
     Vector2 remainder;
     Vector2 gravity;
@@ -106,7 +113,7 @@ struct Mover {
     void (*on_hit_y)(Mover *self);
 };
 
-bool CheckCollision(Collider *collider, CollisionMask mask, Vector2 offset);
+bool CheckForCollisions(Collider *collider, Vector2 offset);
 bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset);
 void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider);
 
@@ -133,6 +140,7 @@ global inline Rectangle GetRectForCircle(Circle c) {
 // Game objects
 
 typedef struct {
+    EntityID entity_id;
     Vector2 pos;
     Animation anim;
     Mover mover;
@@ -140,6 +148,7 @@ typedef struct {
 } Ball;
 
 typedef struct {
+    EntityID entity_id;
     Vector2 pos;
     Animation anim;
     Mover mover;
@@ -147,6 +156,7 @@ typedef struct {
 } Paddle;
 
 typedef struct {
+    EntityID entity_id;
     Rectangle interior;
     Collider *colliders;
 } ArenaBounds;
@@ -162,6 +172,10 @@ typedef struct {
         char* title;
     } window;
 
+    struct Debug {
+        bool draw_colliders;
+    } debug;
+
     struct Entities {
         Ball ball;
         Paddle paddle;
@@ -169,8 +183,8 @@ typedef struct {
     } entities;
 
     struct World {
-        Mover *movers;
-        Collider *colliders;
+        Mover **movers;
+        Collider **colliders;
     } world;
 
     bool exit_requested;

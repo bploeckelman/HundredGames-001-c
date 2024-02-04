@@ -14,7 +14,7 @@
 // ----------------------------------------------------------------------------
 // Global data
 
-global const Vector2 GRAVITY = {0, -500.0f};
+global const Vector2 GRAVITY = {0, -50.0f};
 
 global Assets assets = {0};
 
@@ -63,14 +63,14 @@ internal void Init() {
 
     state.camera = (Camera2D){
         .target = (Vector2){0.0f, 0.0f},
-        .offset = (Vector2){0.0f, 0.0f},
+        .offset = (Vector2){state.window.width / 2, state.window.height / 2},
         .rotation = 0.0f,
         .zoom = 1.0f
     };
 
     state.entities = (struct Entities){
         .ball = MakeBall((Vector2){0, 100}, (Vector2){0, -500}, 25, LoadAnimation(6, assets.ball_textures)),
-        .paddle = MakePaddle((Vector2){0, 0}, (Vector2){200, 50}, LoadAnimation(1, assets.paddle_textures)),
+        .paddle = MakePaddle((Vector2){0, -state.window.height / 2 + 25}, (Vector2){200, 50}, LoadAnimation(1, assets.paddle_textures)),
         .bounds = MakeArenaBounds((Rectangle) {
                 -state.window.width / 2,
                 -state.window.height / 2,
@@ -80,25 +80,25 @@ internal void Init() {
     };
 
     // add mover components to world array
-    arrput(state.world.movers, state.entities.ball.mover);
-    arrput(state.world.movers, state.entities.paddle.mover);
+    arrput(state.world.movers, &state.entities.ball.mover);
+    arrput(state.world.movers, &state.entities.paddle.mover);
 
     // add collider components to world array
-    arrput(state.world.colliders, state.entities.ball.collider);
-    arrput(state.world.colliders, state.entities.paddle.collider);
+    arrput(state.world.colliders, &state.entities.ball.collider);
+    arrput(state.world.colliders, &state.entities.paddle.collider);
     for (i32 i = 0; i < arrlen(state.entities.bounds.colliders); i++) {
-        arrput(state.world.colliders, state.entities.bounds.colliders[i]);
+        arrput(state.world.colliders, &state.entities.bounds.colliders[i]);
     }
 }
 
 internal void Update() {
     switch (state.current_screen) {
         case TITLE: {
-            if (IsKeyReleased(KEY_ENTER) ||
-                IsKeyReleased(KEY_SPACE) ||
-                IsGestureDetected(GESTURE_TAP)) {
+//            if (IsKeyReleased(KEY_ENTER) ||
+//                IsKeyReleased(KEY_SPACE) ||
+//                IsGestureDetected(GESTURE_TAP)) {
                 state.current_screen = GAMEPLAY;
-            }
+//            }
             break;
         }
         case GAMEPLAY: {
@@ -123,6 +123,10 @@ internal void UpdateGameplay() {
     const bool left_down = IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A);
     const bool right_down = IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D);
 
+    if (IsKeyPressed(KEY_ONE)) {
+        state.debug.draw_colliders = !state.debug.draw_colliders;
+    }
+
     // update entities
     Ball *ball = &state.entities.ball;
     Paddle *paddle = &state.entities.paddle;
@@ -136,7 +140,8 @@ internal void UpdateGameplay() {
     const i32 sign = left_down ? -1 : right_down ? 1 : 0;
     paddle->mover.vel.x += sign * speed_impulse * dt;
     if (calc_abs(paddle->mover.vel.x) > speed_max) {
-        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * dt);
+        f32 scale = (sign != calc_sign(paddle->mover.vel.x)) ? 1.0f : 0.25f;
+        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * scale * dt);
     }
 
     UpdateMover(dt, &paddle->pos, &paddle->mover, &paddle->collider);
@@ -186,6 +191,24 @@ internal void DrawFrame() {
             texture = GetAnimationKeyframe(paddle.anim);
             texture_rect = (Rectangle){0, 0, texture.width, texture.height};
             DrawTexturePro(texture, texture_rect, paddle.collider.shape.rect, origin, 0.0f, WHITE);
+
+            if (state.debug.draw_colliders) {
+                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
+                    Collider *collider = state.world.colliders[i];
+                    switch (collider->type) {
+                        case SHAPE_CIRC: {
+                            DrawCircleLinesV(collider->shape.circle.center, collider->shape.circle.radius, MAGENTA);
+                            break;
+                        }
+                        case SHAPE_RECT: {
+                            DrawRectangleLinesEx(collider->shape.rect, 1, MAGENTA);
+                            break;
+                        }
+                        case SHAPE_NONE:
+                        default: break;
+                    }
+                }
+            }
             break;
         }
         case CREDITS: {
@@ -273,15 +296,15 @@ internal void UpdateAnimation(Animation *anim) {
 // ----------------------------------------------------------------------------
 // Component functions
 
-internal bool CheckCollision(Collider *collider, CollisionMask mask, Vector2 offset) {
-    if (!collider || mask == MASK_NONE) return false;
+internal bool CheckForCollisions(Collider *collider, Vector2 offset) {
+    if (!collider || collider->mask == MASK_NONE) return false;
 
     for (i32 i = 0; i < arrlen(state.world.colliders); i++) {
-        Collider *other = &state.world.colliders[i];
+        Collider *other = state.world.colliders[i];
 
-        bool is_different  = other != collider;
-        bool is_masked     = (other->mask & mask) == mask;
-        if (is_different && is_masked && CollidersOverlap(collider, other, offset)) {
+        bool is_different  = collider != other;
+        bool collides_with = collider->collides_with | other->mask;
+        if (is_different && collides_with && CollidersOverlap(collider, other, offset)) {
             return true;
         }
     }
@@ -317,7 +340,7 @@ internal bool MoveX(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
             // check for potential collision before moving this pixel
-            if (CheckCollision(collider, collider->mask, (Vector2) {sign, 0})) {
+            if (CheckForCollisions(collider, (Vector2) {sign, 0})) {
                 if (mover->on_hit_x) {
                     mover->on_hit_x(mover);
                 } else {
@@ -350,7 +373,7 @@ internal bool MoveY(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
             // check for potential collision before moving this pixel
-            if (CheckCollision(collider, collider->mask, (Vector2) {0, sign})) {
+            if (CheckForCollisions(collider, (Vector2) {0, sign})) {
                 if (mover->on_hit_y) {
                     mover->on_hit_y(mover);
                 } else {
@@ -384,12 +407,12 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
     }
 
     // apply gravity
-    bool wont_collide_x = !collider || !CheckCollision(collider, collider->mask, (Vector2){calc_sign(mover->vel.x), 0});
+    bool wont_collide_x = !collider || !CheckForCollisions(collider, (Vector2) {calc_sign(mover->vel.x), 0});
     if (mover->gravity.x != 0 && wont_collide_x) {
         mover->vel.x += mover->gravity.x * dt;
     }
 
-    bool wont_collide_y = !collider || !CheckCollision(collider, collider->mask, (Vector2){0, calc_sign(mover->vel.y)});
+    bool wont_collide_y = !collider || !CheckForCollisions(collider, (Vector2) {0, calc_sign(mover->vel.y)});
     if (mover->gravity.y != 0 && wont_collide_y) {
         mover->vel.y += mover->gravity.y * dt;
     }
@@ -399,12 +422,23 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
     f32 total_move_y = mover->remainder.y + mover->vel.y * dt;
 
     // round to nearest integer since we only move in whole pixels
-    i32 move_x = calc_round(total_move_x);
-    i32 move_y = calc_round(total_move_y);
+    i32 move_x = (total_move_x >= 0) ? floorf(total_move_x + 0.5f) : ceilf(total_move_x - 0.5f);
+    i32 move_y = (total_move_y >= 0) ? floorf(total_move_y + 0.5f) : ceilf(total_move_y - 0.5f);
 
     // save the remainder for next frame
     mover->remainder.x = total_move_x - move_x;
     mover->remainder.y = total_move_y - move_y;
+
+    if (mover->entity_id == state.entities.ball.entity_id) {
+        printf("[ball] pos: (%+04.1f, %+04.1f), vel: (%+04.2f, %+04.2f), total_move: (%+04.2f, %+04.2f), move: (%+04d, %+04d), rem: (%+04.2f, %+04.2f)\n",
+               state.entities.ball.pos.x,
+               state.entities.ball.pos.y,
+               mover->vel.x, mover->vel.y,
+               total_move_x, total_move_y,
+               move_x, move_y,
+               mover->remainder.x, mover->remainder.y);
+    }
+
 
     // move by integer values
     MoveX(pos, mover, collider, move_x);
@@ -434,17 +468,22 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
 
 internal void BallHitX(Mover *self) {
     self->vel.x *= -1;
+    self->remainder.x = 0;
 }
 
 internal void BallHitY(Mover *self) {
     self->vel.y *= -1;
+    self->remainder.y = 0;
 }
 
 internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
+    EntityID entity_id = next_entity_id++;
     return (Ball){
+            .entity_id = entity_id,
             .pos = pos,
             .anim = anim,
             .mover = (Mover){
+                    .entity_id = entity_id,
                     .vel = vel,
                     .remainder = (Vector2){0, 0},
                     .gravity = GRAVITY,
@@ -453,7 +492,9 @@ internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
                     .on_hit_y = BallHitY,
             },
             .collider = (Collider){
-                    .mask = MASK_BALL | MASK_PADDLE | MASK_BOUNDS,
+                    .entity_id = entity_id,
+                    .mask = MASK_BALL,
+                    .collides_with = MASK_BALL | MASK_PADDLE | MASK_BOUNDS,
                     .type = SHAPE_CIRC,
                     .shape = {
                             .circle = {
@@ -466,10 +507,13 @@ internal Ball MakeBall(Vector2 pos, Vector2 vel, u32 radius, Animation anim) {
 }
 
 internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
+    EntityID entity_id = next_entity_id++;
     return (Paddle){
+            .entity_id = entity_id,
             .pos = pos,
             .anim = anim,
             .mover = (Mover){
+                    .entity_id = entity_id,
                     .vel = {0, 0},
                     .remainder = {0, 0},
                     .gravity = {0, 0},
@@ -478,7 +522,9 @@ internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
                     .on_hit_y = NULL,
             },
             .collider = (Collider){
-                    .mask = MASK_BALL | MASK_BOUNDS,
+                    .entity_id = entity_id,
+                    .mask = MASK_PADDLE,
+                    .collides_with = MASK_BALL | MASK_BOUNDS,
                     .type = SHAPE_RECT,
                     .shape = {
                             .rect = {
@@ -492,19 +538,21 @@ internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
 }
 
 internal ArenaBounds MakeArenaBounds(Rectangle interior) {
-    ArenaBounds bounds = {interior, NULL};
+    EntityID entity_id = next_entity_id++;
+    ArenaBounds bounds = {entity_id, interior, NULL};
 
-    const CollisionMask collides_with = MASK_BALL | MASK_PADDLE;
-    Collider l = {collides_with, SHAPE_RECT};
-    Collider r = {collides_with, SHAPE_RECT};
-    Collider t = {collides_with, SHAPE_RECT};
-    Collider b = {collides_with, SHAPE_RECT};
+    u32 mask = MASK_BOUNDS;
+    u32 collides_with = MASK_BALL | MASK_PADDLE;
+    Collider l = {entity_id, mask, collides_with, SHAPE_RECT};
+    Collider r = {entity_id, mask, collides_with, SHAPE_RECT};
+    Collider t = {entity_id, mask, collides_with, SHAPE_RECT};
+    Collider b = {entity_id, mask, collides_with, SHAPE_RECT};
 
     const i32 size = 10;
-    l.shape.rect = (Rectangle){interior.x - size, interior.y, size, interior.height};
-    r.shape.rect = (Rectangle){interior.x + interior.width, interior.y, size, interior.height};
-    t.shape.rect = (Rectangle){interior.x, interior.y + interior.height, interior.width, size};
-    b.shape.rect = (Rectangle){interior.x, interior.y - size, interior.width, size};
+    l.shape.rect = (Rectangle){interior.x, interior.y, size, interior.height};
+    r.shape.rect = (Rectangle){interior.x + interior.width - size, interior.y, size, interior.height};
+    t.shape.rect = (Rectangle){interior.x, interior.y + interior.height - size, interior.width, size};
+    b.shape.rect = (Rectangle){interior.x, interior.y, interior.width, size};
 
     arrput(bounds.colliders, l);
     arrput(bounds.colliders, r);
