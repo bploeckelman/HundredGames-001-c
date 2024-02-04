@@ -1,8 +1,6 @@
-#ifndef PRONG_GAME_H
-#define PRONG_GAME_H
+#pragma once
 
 #include "common.h"
-
 #include "raylib.h"
 
 // ----------------------------------------------------------------------------
@@ -225,5 +223,3 @@ void UnloadAssets();
 Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim);
 Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim);
 ArenaBounds MakeArenaBounds(Rectangle interior);
-
-#endif //PRONG_GAME_H

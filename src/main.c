@@ -1,10 +1,7 @@
-#include "common.h"
+#include "game.h"
 
-#include "raylib.h"
 #include "raygui.h"
 #include "dark/style_dark.h"
-
-#include "game.h"
 
 // ----------------------------------------------------------------------------
 // Global data

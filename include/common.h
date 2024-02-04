@@ -1,5 +1,4 @@
-#ifndef PRONG_COMMON_H
-#define PRONG_COMMON_H
+#pragma once
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -254,5 +253,3 @@ global const u64 bit61 = (1ull<<60);
 global const u64 bit62 = (1ull<<61);
 global const u64 bit63 = (1ull<<62);
 global const u64 bit64 = (1ull<<63);
-
-#endif //PRONG_COMMON_H
