@@ -1,13 +1,8 @@
 #include "common.h"
 
 #include "raylib.h"
-
-#define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 #include "dark/style_dark.h"
-
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
 
 #include "game.h"
 
@@ -597,3 +592,12 @@ internal ArenaBounds MakeArenaBounds(Rectangle interior) {
 
     return bounds;
 }
+
+// ----------------------------------------------------------------------------
+// Include single file header implementations
+
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
+
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
