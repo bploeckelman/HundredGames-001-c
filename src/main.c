@@ -156,13 +156,26 @@ internal void UpdateGameplay() {
     UpdateAnimation(&paddle->anim);
 
     // move the paddle based on user input and limit its speed
-    const f32 speed_max = 2000;
-    const f32 speed_impulse = 500;
-    const i32 sign = input_frame.move_left ? -1 : input_frame.move_right ? 1 : 0;
-    paddle->mover.vel.x += sign * speed_impulse * dt;
-    if (calc_abs(paddle->mover.vel.x) > speed_max) {
-        f32 scale = (sign != calc_sign(paddle->mover.vel.x)) ? 1.0f : 0.25f;
-        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * scale * dt);
+    if (input_frame.move_left || input_frame.move_right) {
+        const f32 speed_max = 2000;
+        const f32 speed_impulse = 500;
+        const i32 sign = input_frame.move_left ? -1 : input_frame.move_right ? 1 : 0;
+
+        // if the paddle is moving in the opposite direction, stop it immediately
+        if (sign != calc_sign(paddle->mover.vel.x)) {
+            paddle->mover.vel.x = 0;
+        }
+
+        // move the paddle based on user input
+        paddle->mover.vel.x += sign * speed_impulse * dt;
+
+        // constrain the paddle's max speed
+        if (calc_abs(paddle->mover.vel.x) > speed_max) {
+            paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * dt);
+        }
+    } else {
+        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, 0, 2000 * dt);
+        paddle->mover.vel.y = calc_approach(paddle->mover.vel.y, 0, 2000 * dt);
     }
 
     UpdateMover(dt, &paddle->pos, &paddle->mover, &paddle->collider);
@@ -485,13 +498,17 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
 // ----------------------------------------------------------------------------
 // Factory functions
 
+internal const f32 perturbation_scale = 50.f;
+
 internal void BallHitX(Mover *self) {
     self->vel.x *= -1;
+    self->vel.y += calc_signed_random() * perturbation_scale;
     self->remainder.x = 0;
 }
 
 internal void BallHitY(Mover *self) {
     self->vel.y *= -1;
+    self->vel.x += calc_signed_random() * perturbation_scale;
     self->remainder.y = 0;
 }
 
@@ -543,12 +560,12 @@ internal Paddle MakePaddle(Vector2 pos, Vector2 size, Animation anim) {
             .collider = (Collider){
                     .entity_id = entity_id,
                     .mask = MASK_PADDLE,
-                    .collides_with = MASK_BOUNDS,
+                    .collides_with = MASK_BALL | MASK_BOUNDS,
                     .type = SHAPE_RECT,
                     .shape = {
                             .rect = {
                                     -size.x / 2,
-                                    (-state.window.height + size.y) / 2,
+                                    -size.y / 2,
                                     size.x, size.y
                             },
                     },
@@ -568,10 +585,10 @@ internal ArenaBounds MakeArenaBounds(Rectangle interior) {
     Collider b = {entity_id, mask, collides_with, SHAPE_RECT};
 
     const i32 size = 10;
-    l.shape.rect = (Rectangle){interior.x, interior.y, size, interior.height};
-    r.shape.rect = (Rectangle){interior.x + interior.width - size, interior.y, size, interior.height};
-    t.shape.rect = (Rectangle){interior.x, interior.y + interior.height - size, interior.width, size};
-    b.shape.rect = (Rectangle){interior.x, interior.y, interior.width, size};
+    l.shape.rect = (Rectangle){interior.x - size, interior.y, size, interior.height};
+    r.shape.rect = (Rectangle){interior.x + interior.width, interior.y, size, interior.height};
+    t.shape.rect = (Rectangle){interior.x, interior.y + interior.height, interior.width, size};
+    b.shape.rect = (Rectangle){interior.x, interior.y - size, interior.width, size};
 
     arrput(bounds.colliders, l);
     arrput(bounds.colliders, r);

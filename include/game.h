@@ -32,6 +32,14 @@ global inline f32 calc_approach(f32 t, f32 target, f32 delta) {
     return (t < target) ? calc_min(t + delta, target) : calc_max(t - delta, target);
 }
 
+global inline f32 calc_unit_random() {
+    return GetRandomValue(0, 1000) / 1000.0f;
+}
+
+global inline f32 calc_signed_random() {
+    return (GetRandomValue(0, 1000) / 500.0f) - 1.0f;
+}
+
 // ----------------------------------------------------------------------------
 // Game lifecycle functions
 
