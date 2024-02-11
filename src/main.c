@@ -18,6 +18,7 @@ State state = {
         .title = "Prong"
     },
     .debug = {
+        .log = false,
         .draw_colliders = true,
         .manual_frame_step = false,
     },
@@ -142,8 +143,9 @@ internal void UpdateGameplay() {
     };
 
     // toggle debug flags if needed
-    if (IsKeyPressed(KEY_ONE)) state.debug.manual_frame_step = !state.debug.manual_frame_step;
-    if (IsKeyPressed(KEY_TWO)) state.debug.draw_colliders    = !state.debug.draw_colliders;
+    if (IsKeyPressed(KEY_ONE))   state.debug.manual_frame_step = !state.debug.manual_frame_step;
+    if (IsKeyPressed(KEY_TWO))   state.debug.draw_colliders    = !state.debug.draw_colliders;
+    if (IsKeyPressed(KEY_THREE)) state.debug.log               = !state.debug.log;
 
     // if manual frame stepping is enabled, only update if the user has requested it
     if (state.debug.manual_frame_step && !state.input_frame.step_frame) {
@@ -251,6 +253,23 @@ internal void DrawFrame() {
 
 
             if (state.debug.draw_colliders) {
+                for (u32 i = 0; i < world.num_entities; i++) {
+                    if (i == ENTITY_NONE) continue;
+
+                    bool has_position = world.positions.active[i];
+                    bool has_collider = world.collider_shapes.active[i];
+                    if (!has_position || !has_collider) continue;
+
+                    pos_x = world.positions.x[i];
+                    pos_y = world.positions.y[i];
+                    off_x = world.collider_shapes.offset_x[i];
+                    off_y = world.collider_shapes.offset_y[i];
+                    width = world.collider_shapes.width[i];
+                    height = world.collider_shapes.height[i];
+
+                    // TODO - draw different shapes based on collider type
+                    DrawRectangleLinesEx((Rectangle){pos_x + off_x, pos_y + off_y, width, height}, 1, MAGENTA);
+                }
 //                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
 //                    Collider *collider = state.world.colliders[i];
 //                    switch (collider->type) {

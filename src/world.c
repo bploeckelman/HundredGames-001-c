@@ -32,7 +32,9 @@ void world_init() {
 }
 
 void world_update(f32 dt) {
-    world_log();
+    if (state.debug.log) {
+        world_log();
+    }
 
     for (u32 i = 0; i < world.num_entities; i++) {
         bool has_position = world.positions.active[i];

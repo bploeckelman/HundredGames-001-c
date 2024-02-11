@@ -271,6 +271,7 @@ typedef struct {
     } window;
 
     struct Debug {
+        bool log;
         bool draw_colliders;
         bool manual_frame_step;
     } debug;
