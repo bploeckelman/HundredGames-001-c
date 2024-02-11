@@ -1,13 +1,15 @@
 #include "game.h"
 
+internal bool entity_move_x(Entity entity, f32 amount);
+internal bool entity_move_y(Entity entity, f32 amount);
+
+internal void entity_create_infos();
 internal void entity_create_names();
 internal void entity_create_positions();
 internal void entity_create_velocities();
 internal void entity_create_colliders();
 
-internal bool entity_move_x(Entity entity, f32 amount);
-internal bool entity_move_y(Entity entity, f32 amount);
-
+internal void entity_cleanup_infos();
 internal void entity_cleanup_names();
 internal void entity_cleanup_positions();
 internal void entity_cleanup_velocities();
@@ -19,12 +21,12 @@ internal void world_log();
 // Implementation
 
 void world_init() {
-    if (world.active) {
+    if (world.initialized) {
         world_cleanup();
     }
 
     world = (World) {0};
-    world.active = true;
+    world.initialized = true;
 
     // reserve the '0' entity id to represent 'no entity'
     world_create_entity();
@@ -32,13 +34,17 @@ void world_init() {
 }
 
 void world_update(f32 dt) {
+    if (!world.initialized) {
+        world_init();
+    }
+
     if (state.debug.log) {
         world_log();
     }
 
     for (u32 i = 0; i < world.num_entities; i++) {
-        bool has_position = world.positions.active[i];
-        bool has_velocity = world.velocities.active[i];
+        bool has_position = entity_has_components(i, COMP_POSITION);
+        bool has_velocity = entity_has_components(i, COMP_VELOCITY);
 
         if (has_position) {
             world.positions.prev_x[i] = world.positions.x[i];
@@ -76,48 +82,68 @@ void world_update(f32 dt) {
 }
 
 void world_cleanup() {
-    entity_cleanup_names();
-    entity_cleanup_positions();
-    entity_cleanup_velocities();
-    entity_cleanup_colliders();
+    if (world.initialized) {
+        entity_cleanup_infos();
+        entity_cleanup_names();
+        entity_cleanup_positions();
+        entity_cleanup_velocities();
+        entity_cleanup_colliders();
+    }
     world = (World) {0};
 }
 
 Entity world_create_entity() {
     // ensure that we have an initialized world before creating any entities
-    if (!world.active) {
+    if (!world.initialized) {
         world_init();
     }
 
     // return the next unused entity id
     u32 next_entity_id = world.num_entities++;
 
-    // TODO - scan for free slots first, if there is one, pass the index into the `ecs_create_entity_<component>()` functions
+    // TODO - scan for available slots first, if there is one pass the index into `entity_add_<component>()`
     //  to zero out the arrays for that entity's slot, see comment in world_destroy_entity()
 
     // add an 'empty' element to each component array for the new entity
+    entity_create_infos();
     entity_create_names();
     entity_create_positions();
     entity_create_velocities();
     entity_create_colliders();
 
+    // mark this entity as in use and active
+    world.infos.active[next_entity_id] = true;
+    world.infos.in_use[next_entity_id] = true;
+
     return next_entity_id;
 }
 
 void world_destroy_entity(Entity entity) {
-    // TODO - add another array to world that tracks 'free' entity ids / array slots
+    // TODO -
     //   then when creating a new entity, don't always increment world.num_entities,
     //   instead first check for any unused entity slots and return one of those if available,
     //   otherwise increment world.num_entities and add a new slot
 }
 
+bool entity_has_components(Entity entity, ComponentMask mask) {
+    bool is_invalid = (entity == ENTITY_NONE || entity >= world.num_entities); // TODO - equality too? double check
+    bool is_unused = !world.infos.in_use[entity];
+    if (is_invalid && is_unused) {
+        return false;
+    }
+
+    return (world.infos.components[entity] & mask) == mask;
+}
+
 void entity_add_name(Entity entity, NameStr name) {
-    world.names.active[entity] = true;
+    world.infos.components[entity] |= COMP_NAME;
+
     strcpy_s(world.names.name[entity].val, NAME_MAX_LEN, name.val);
 }
 
 void entity_add_position(Entity entity, u32 x, u32 y) {
-    world.positions.active[entity] = true;
+    world.infos.components[entity] |= COMP_POSITION;
+
     world.positions.x[entity] = x;
     world.positions.y[entity] = y;
     world.positions.prev_x[entity] = x;
@@ -125,7 +151,8 @@ void entity_add_position(Entity entity, u32 x, u32 y) {
 }
 
 void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 gravity) {
-    world.velocities.active[entity] = true;
+    world.infos.components[entity] |= COMP_VELOCITY;
+
     world.velocities.x[entity] = vel_x;
     world.velocities.y[entity] = vel_y;
     world.velocities.remainder_x[entity] = 0;
@@ -135,7 +162,8 @@ void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 
 }
 
 void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 width, u32 height) {
-    world.collider_shapes.active[entity] = true;
+    world.infos.components[entity] |= COMP_COLLIDER;
+
     world.collider_shapes.offset_x[entity] = offset_x;
     world.collider_shapes.offset_y[entity] = offset_y;
     world.collider_shapes.width[entity] = width;
@@ -148,7 +176,8 @@ void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u
 }
 
 void entity_add_collider_circ(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 radius) {
-    world.collider_shapes.active[entity] = true;
+    world.infos.components[entity] |= COMP_COLLIDER;
+
     world.collider_shapes.offset_x[entity] = offset_x;
     world.collider_shapes.offset_y[entity] = offset_y;
     world.collider_shapes.width[entity] = 2 * radius;
@@ -173,8 +202,8 @@ internal bool entities_overlap(Entity a, Entity b, int offset_x, int offset_y) {
         case SHAPE_CIRC: {
             i32 a_r = world.collider_shapes.radius[a];
             switch (world.collider_shapes.type[b]) {
-                case SHAPE_CIRC: return circ_circ_overlaps2(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.radius[b]);
-                case SHAPE_RECT: return circ_rect_overlaps2(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
+                case SHAPE_CIRC: return circ_circ_overlaps(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.radius[b]);
+                case SHAPE_RECT: return circ_rect_overlaps(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
                 case SHAPE_NONE:
                 default: break;
             }
@@ -183,8 +212,8 @@ internal bool entities_overlap(Entity a, Entity b, int offset_x, int offset_y) {
             i32 a_w = world.collider_shapes.width[a];
             i32 a_h = world.collider_shapes.height[a];
             switch (world.collider_shapes.type[b]) {
-                case SHAPE_CIRC: return circ_rect_overlaps2(b_x, b_y, world.collider_shapes.radius[b], a_x, a_y, a_w, a_h);
-                case SHAPE_RECT: return rect_rect_overlaps2(a_x, a_y, a_w, a_h, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
+                case SHAPE_CIRC: return circ_rect_overlaps(b_x, b_y, world.collider_shapes.radius[b], a_x, a_y, a_w, a_h);
+                case SHAPE_RECT: return rect_rect_overlaps(a_x, a_y, a_w, a_h, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
                 case SHAPE_NONE:
                 default: break;
             }
@@ -194,15 +223,7 @@ internal bool entities_overlap(Entity a, Entity b, int offset_x, int offset_y) {
         default: break;
     }
 
-    i32 a_w = world.collider_shapes.width[a];
-    i32 a_h = world.collider_shapes.height[a];
-    i32 b_w = world.collider_shapes.width[b];
-    i32 b_h = world.collider_shapes.height[b];
-
-    return (a_x < b_x + b_w &&
-            a_x + a_w > b_x &&
-            a_y < b_y + b_h &&
-            a_y + a_h > b_y);
+    return false;
 }
 
 internal Entity world_check_collisions(Entity entity, u32 mask, int offset_x, int offset_y) {
@@ -211,8 +232,8 @@ internal Entity world_check_collisions(Entity entity, u32 mask, int offset_x, in
     for (u32 other = 0; other < world.num_entities; ++other) {
         bool is_different = (other != entity);
         bool is_masked = (colliders->mask[other] & mask) == mask;
-        bool this_has_collider = colliders->active[entity];
-        bool that_has_collider = colliders->active[other];
+        bool this_has_collider = entity_has_components(entity, COMP_COLLIDER);
+        bool that_has_collider = entity_has_components(other, COMP_COLLIDER);
 
         // skip entities that don't need to be processed
         if (!is_different || !is_masked || !this_has_collider || !that_has_collider) {
@@ -227,8 +248,7 @@ internal Entity world_check_collisions(Entity entity, u32 mask, int offset_x, in
 }
 
 internal bool entity_move_x(Entity entity, f32 amount) {
-    bool has_collider = world.collider_shapes.active[entity];
-    if (has_collider) {
+    if (entity_has_components(entity, COMP_COLLIDER)) {
         i32 sign = calc_sign(amount);
 
         while (amount != 0) {
@@ -261,8 +281,7 @@ internal bool entity_move_x(Entity entity, f32 amount) {
 }
 
 internal bool entity_move_y(Entity entity, f32 amount) {
-    bool has_collider = world.collider_shapes.active[entity];
-    if (has_collider) {
+    if (entity_has_components(entity, COMP_COLLIDER)) {
         i32 sign = calc_sign(amount);
 
         while (amount != 0) {
@@ -294,13 +313,17 @@ internal bool entity_move_y(Entity entity, f32 amount) {
     return false;
 }
 
+internal void entity_create_infos() {
+    arrput(world.infos.active, false);
+    arrput(world.infos.in_use, false);
+    arrput(world.infos.components, COMP_NONE);
+}
+
 internal void entity_create_names() {
-    arrput(world.names.active, false);
     arrput(world.names.name, NAME_EMPTY);
 }
 
 internal void entity_create_positions() {
-    arrput(world.positions.active, false);
     arrput(world.positions.x, 0);
     arrput(world.positions.y, 0);
     arrput(world.positions.prev_x, 0);
@@ -308,7 +331,6 @@ internal void entity_create_positions() {
 }
 
 internal void entity_create_velocities() {
-    arrput(world.velocities.active, false);
     arrput(world.velocities.x, 0);
     arrput(world.velocities.y, 0);
     arrput(world.velocities.remainder_x, 0);
@@ -318,7 +340,6 @@ internal void entity_create_velocities() {
 }
 
 internal void entity_create_colliders() {
-    arrput(world.collider_shapes.active, false);
     arrput(world.collider_shapes.offset_x, 0);
     arrput(world.collider_shapes.offset_y, 0);
     arrput(world.collider_shapes.width, 0);
@@ -330,50 +351,47 @@ internal void entity_create_colliders() {
     arrput(world.collider_shapes.on_hit_y, NULL);
 }
 
+internal void entity_cleanup_infos() {
+    arrfree(world.infos.active);
+    arrfree(world.infos.in_use);
+    arrfree(world.infos.components);
+}
+
 internal void entity_cleanup_names() {
-    for (u32 i = 0; i < world.num_entities; ++i) {
-        arrfree(world.names.active);
-        arrfree(world.names.name);
-    }
+    arrfree(world.names.name);
 }
 
 internal void entity_cleanup_positions() {
-    for (u32 i = 0; i < world.num_entities; ++i) {
-        arrfree(world.positions.active);
-        arrfree(world.positions.x);
-        arrfree(world.positions.y);
-        arrfree(world.positions.prev_x);
-        arrfree(world.positions.prev_y);
-    }
+    arrfree(world.positions.x);
+    arrfree(world.positions.y);
+    arrfree(world.positions.prev_x);
+    arrfree(world.positions.prev_y);
 }
 
 internal void entity_cleanup_velocities() {
-    for (u32 i = 0; i < world.num_entities; ++i) {
-        arrfree(world.velocities.active);
-        arrfree(world.velocities.x);
-        arrfree(world.velocities.y);
-        arrfree(world.velocities.remainder_x);
-        arrfree(world.velocities.remainder_y);
-    }
+    arrfree(world.velocities.x);
+    arrfree(world.velocities.y);
+    arrfree(world.velocities.remainder_x);
+    arrfree(world.velocities.remainder_y);
 }
 
 internal void entity_cleanup_colliders() {
-    for (u32 i = 0; i < world.num_entities; ++i) {
-        arrfree(world.collider_shapes.active);
-        arrfree(world.collider_shapes.offset_x);
-        arrfree(world.collider_shapes.offset_y);
-        arrfree(world.collider_shapes.width);
-        arrfree(world.collider_shapes.height);
-        arrfree(world.collider_shapes.radius);
-        arrfree(world.collider_shapes.type);
-        arrfree(world.collider_shapes.mask);
-        arrfree(world.collider_shapes.on_hit_x);
-        arrfree(world.collider_shapes.on_hit_y);
-    }
+    arrfree(world.collider_shapes.offset_x);
+    arrfree(world.collider_shapes.offset_y);
+    arrfree(world.collider_shapes.width);
+    arrfree(world.collider_shapes.height);
+    arrfree(world.collider_shapes.radius);
+    arrfree(world.collider_shapes.type);
+    arrfree(world.collider_shapes.mask);
+    arrfree(world.collider_shapes.on_hit_x);
+    arrfree(world.collider_shapes.on_hit_y);
 }
 
 typedef struct {
     Entity entity;
+    bool in_use;
+    bool active;
+    ComponentMask components;
     NameStr *name;
     i32 x;
     i32 y;
@@ -397,19 +415,27 @@ internal void world_log() {
     TraceLog(LOG_INFO, "--------------------------------------");
 
     for (u32 i = 0; i < world.num_entities; ++i) {
+        if (i == ENTITY_NONE) {
+            continue;
+        }
+
         EntityData e = {0};
         e.entity = i;
 
-        if (world.names.active[i]) {
+        e.in_use = world.infos.in_use[i];
+        e.active = world.infos.active[i];
+        e.components = world.infos.components[i];
+
+        if (entity_has_components(i, COMP_NAME)) {
             e.name = &world.names.name[i];
         }
-        if (world.positions.active[i]) {
+        if (entity_has_components(i, COMP_POSITION)) {
             e.x = world.positions.x[i];
             e.y = world.positions.y[i];
             e.prev_x = world.positions.prev_x[i];
             e.prev_y = world.positions.prev_y[i];
         }
-        if (world.velocities.active[i]) {
+        if (entity_has_components(i, COMP_VELOCITY)) {
             e.vel_x = world.velocities.x[i];
             e.vel_y = world.velocities.y[i];
             e.remainder_x = world.velocities.remainder_x[i];
@@ -417,7 +443,7 @@ internal void world_log() {
             e.friction = world.velocities.friction[i];
             e.gravity = world.velocities.gravity[i];
         }
-        if (world.collider_shapes.active[i]) {
+        if (entity_has_components(i, COMP_COLLIDER)) {
             e.offset_x = world.collider_shapes.offset_x[i];
             e.offset_y = world.collider_shapes.offset_y[i];
             e.width = world.collider_shapes.width[i];
@@ -425,8 +451,8 @@ internal void world_log() {
             e.radius = world.collider_shapes.radius[i];
         }
 
-        TraceLog(LOG_INFO, "Entity %d: name: '%s', pos: (%d, %d), prev_pos: (%d, %d), vel: (%f, %f), remainder: (%f, %f), friction: %f, gravity: %f, collider: (%d, %d, %d, %d, %d)",
-                 e.entity, e.name->val, e.x, e.y, e.prev_x, e.prev_y, e.vel_x, e.vel_y, e.remainder_x, e.remainder_y, e.friction, e.gravity, e.offset_x, e.offset_y, e.width, e.height, e.radius);
+        TraceLog(LOG_INFO, "Entity %d (in_use: %d, active: %d, components: %#x): name: '%s', pos: (%d, %d), prev_pos: (%d, %d), vel: (%.2f, %.2f), remainder: (%.2f, %.2f), friction: %.2f, gravity: %.2f, collider: (%d, %d, %d, %d, %d)",
+                 e.entity, e.in_use, e.active, e.components, e.name->val, e.x, e.y, e.prev_x, e.prev_y, e.vel_x, e.vel_y, e.remainder_x, e.remainder_y, e.friction, e.gravity, e.offset_x, e.offset_y, e.width, e.height, e.radius);
     }
 
     TraceLog(LOG_INFO, "--------------------------------------\n");

@@ -75,9 +75,9 @@ void UpdateAnimation(Animation *anim);
 
 // an entity is just an index into arrays of components
 typedef u32 Entity;
-global const Entity ENTITY_NONE = 0;
-global Entity next_entity = 1; // old...
 
+// the zero-th entity is reserved for "no entity"
+global const Entity ENTITY_NONE = 0;
 
 // wrap a fixed length string in a struct to simplify usage
 #define NAME_MAX_LEN 256
@@ -87,16 +87,10 @@ typedef struct {
 global const NameStr NAME_EMPTY = {0};
 
 typedef struct {
-    // flag indicating whether the entity for each element has this component or not
-    bool *active;
-
     NameStr *name;
 } Name;
 
 typedef struct {
-    // flag indicating whether the entity for each element has this component or not
-    bool *active;
-
     i32 *x;
     i32 *y;
     i32 *prev_x;
@@ -104,9 +98,6 @@ typedef struct {
 } Position;
 
 typedef struct {
-    // flag indicating whether the entity for each element has this component or not
-    bool *active;
-
     f32 *x;
     f32 *y;
     f32 *remainder_x;
@@ -137,9 +128,6 @@ typedef enum {
 //  for a polygon, the circle and rect fields would also be bounding shapes, used for broad phase collisions
 typedef void (*OnHitFunc)(Entity entity, Entity collided_with);
 typedef struct {
-    // flag indicating whether the entity for each element has this component or not
-    bool *active;
-
     // offsets from entity position, typically {0, 0}
     i32 *offset_x;
     i32 *offset_y;
@@ -152,14 +140,26 @@ typedef struct {
     OnHitFunc *on_hit_y;
 } ColliderShape;
 
+typedef u32 ComponentMask;
+enum {
+    COMP_NONE     = 0,
+    COMP_NAME     = (1 << 0),
+    COMP_POSITION = (1 << 1),
+    COMP_VELOCITY = (1 << 2),
+    COMP_COLLIDER = (1 << 3),
+};
 
-
-// TODO - technically these are sparse arrays, since not all entities will have all components
-// TODO - instead of having a separate 'active' array for each component type,
-//  a 'world' level bitfield could be used to indicate which entities have which components
 typedef struct {
-    bool active;
+    bool *in_use;
+    bool *active;
+    ComponentMask *components;
+} EntityInfo;
+
+typedef struct {
+    bool initialized;
+
     Entity num_entities;
+    EntityInfo infos;
 
     Name names;
     Position positions;
@@ -167,8 +167,8 @@ typedef struct {
     ColliderShape collider_shapes;
 } World;
 
-
 extern World world;
+
 
 void world_init();
 void world_update(f32 dt);
@@ -177,6 +177,8 @@ void world_cleanup();
 Entity world_create_entity();
 void world_destroy_entity(Entity entity);
 
+bool entity_has_components(Entity entity, ComponentMask mask);
+
 void entity_add_name(Entity entity, NameStr name);
 void entity_add_position(Entity entity, u32 x, u32 y);
 void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 gravity);
@@ -184,102 +186,23 @@ void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u
 void entity_add_collider_circ(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 radius);
 
 
-
-typedef struct {
-    Vector2 center;
-    f32 radius;
-} Circle;
-
-typedef struct {
-    Entity entity_id;
-    u32 mask;
-    u32 collides_with;
-    ShapeType type;
-    union {
-        Circle circle;
-        Rectangle rect;
-    } shape;
-} Collider;
-
-typedef struct Mover Mover;
-struct Mover {
-    Entity entity_id;
-    Vector2 vel;
-    Vector2 remainder;
-    Vector2 gravity;
-    f32 friction;
-    void (*on_hit_x)(Mover *self, Entity collided_with_id);
-    void (*on_hit_y)(Mover *self, Entity collided_with_id);
-};
-
-Entity CheckForCollisions(Collider *collider, u32 mask, Vector2 offset);
-bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset);
-void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider);
-
-global inline bool rect_rect_overlaps(Rectangle a, Rectangle b, Vector2 offset) {
-    Rectangle a_offset = { a.x + offset.x, a.y + offset.y, a.width, a.height };
-    return CheckCollisionRecs(a_offset, b);
-}
-
-global inline bool circ_rect_overlaps(Circle c, Rectangle r, Vector2 offset) {
-    Vector2 c_offset = { c.center.x + offset.x, c.center.y + offset.y };
-    return CheckCollisionCircleRec(c_offset, c.radius, r);
-}
-
-global inline bool circ_circ_overlaps(Circle a, Circle b, Vector2 offset) {
-    Vector2 a_offset = { a.center.x + offset.x, a.center.y + offset.y };
-    return CheckCollisionCircles(a_offset, a.radius, b.center, b.radius);
-}
-
-global inline Rectangle GetRectForCircle(Circle c) {
-    return (Rectangle){ c.center.x - c.radius, c.center.y - c.radius, c.radius * 2, c.radius * 2 };
-}
-
-
-global inline bool rect_rect_overlaps2(i32 x1, i32 y1, i32 w1, i32 h1, i32 x2, i32 y2, i32 w2, i32 h2) {
+global inline bool rect_rect_overlaps(i32 x1, i32 y1, i32 w1, i32 h1, i32 x2, i32 y2, i32 w2, i32 h2) {
     Rectangle a = { x1, y1, w1, h1 };
     Rectangle b = { x2, y2, w2, h2 };
     return CheckCollisionRecs(a, b);
 }
 
-global inline bool circ_rect_overlaps2(i32 cx, i32 cy, i32 cr, i32 rx, i32 ry, i32 rw, i32 rh) {
+global inline bool circ_rect_overlaps(i32 cx, i32 cy, i32 cr, i32 rx, i32 ry, i32 rw, i32 rh) {
     Vector2 c = { cx, cy };
     Rectangle r = { rx, ry, rw, rh };
     return CheckCollisionCircleRec(c, cr, r);
 }
 
-global inline bool circ_circ_overlaps2(i32 x1, i32 y1, i32 r1, i32 x2, i32 y2, i32 r2) {
+global inline bool circ_circ_overlaps(i32 x1, i32 y1, i32 r1, i32 x2, i32 y2, i32 r2) {
     Vector2 c1 = { x1, y1 };
     Vector2 c2 = { x2, y2 };
     return CheckCollisionCircles(c1, r1, c2, r2);
 }
-
-
-// ----------------------------------------------------------------------------
-// Game objects
-
-typedef struct {
-    Entity entity_id;
-    Vector2 pos;
-    Animation anim;
-    Mover mover;
-    Collider collider;
-} Ball;
-
-typedef struct {
-    Entity entity_id;
-    Vector2 pos;
-    Animation anim;
-    Mover mover;
-    Collider collider;
-} Paddle;
-
-typedef struct {
-    Entity entity_id;
-    Rectangle interior;
-    Collider *colliders;
-} ArenaBounds;
-
 
 // ----------------------------------------------------------------------------
 // Game state data
@@ -305,23 +228,12 @@ typedef struct {
         bool step_frame;
     } input_frame;
 
-//    struct Entities {
-//        Ball ball;
-//        Paddle paddle;
-//        ArenaBounds bounds;
-//    } entities;
-
     Entity ball;
     Entity paddle;
     Entity bounds_l;
     Entity bounds_r;
     Entity bounds_t;
     Entity bounds_b;
-
-//    struct World {
-//        Mover **movers;
-//        Collider **colliders;
-//    } world;
 
     GameScreen current_screen;
     RenderTexture render_texture;
@@ -342,10 +254,3 @@ extern Assets assets;
 
 void LoadAssets();
 void UnloadAssets();
-
-// ----------------------------------------------------------------------------
-// Factory functions
-
-Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim);
-Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim);
-ArenaBounds MakeArenaBounds(Rectangle interior);
