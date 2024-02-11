@@ -115,6 +115,21 @@ typedef struct {
     f32 *gravity;
 } Velocity;
 
+typedef u32 CollisionMask;
+enum {
+    MASK_NONE   = 0,
+    MASK_BALL   = (1 << 0),
+    MASK_PADDLE = (1 << 1),
+    MASK_BOUNDS = (1 << 2),
+};
+
+typedef enum {
+    SHAPE_NONE = 0,
+    SHAPE_CIRC,
+    SHAPE_RECT,
+    SHAPE_COUNT,
+} ShapeType;
+
 // TODO - how to store different shape types and their data here...
 //  maybe include all elements and use the type field to set the primary shape,
 //  that way if the primary shape is a circle, the rect fields represent a bounding rect for the circle
@@ -131,7 +146,8 @@ typedef struct {
     u32 *width;
     u32 *height;
     u32 *radius;
-    u32 *mask;
+    ShapeType *type;
+    CollisionMask *mask;
     OnHitFunc *on_hit_x;
     OnHitFunc *on_hit_y;
 } ColliderShape;
@@ -164,7 +180,8 @@ void world_destroy_entity(Entity entity);
 void entity_add_name(Entity entity, NameStr name);
 void entity_add_position(Entity entity, u32 x, u32 y);
 void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 gravity);
-void entity_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u32 height, u32 radius);
+void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 width, u32 height);
+void entity_add_collider_circ(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 radius);
 
 
 
@@ -172,21 +189,6 @@ typedef struct {
     Vector2 center;
     f32 radius;
 } Circle;
-
-typedef u32 CollisionMask;
-enum {
-    MASK_NONE   = 0,
-    MASK_BALL   = (1 << 0),
-    MASK_PADDLE = (1 << 1),
-    MASK_BOUNDS = (1 << 2),
-};
-
-typedef enum {
-    SHAPE_NONE = 0,
-    SHAPE_CIRC,
-    SHAPE_RECT,
-    SHAPE_COUNT,
-} ShapeType;
 
 typedef struct {
     Entity entity_id;
@@ -232,6 +234,26 @@ global inline bool circ_circ_overlaps(Circle a, Circle b, Vector2 offset) {
 global inline Rectangle GetRectForCircle(Circle c) {
     return (Rectangle){ c.center.x - c.radius, c.center.y - c.radius, c.radius * 2, c.radius * 2 };
 }
+
+
+global inline bool rect_rect_overlaps2(i32 x1, i32 y1, i32 w1, i32 h1, i32 x2, i32 y2, i32 w2, i32 h2) {
+    Rectangle a = { x1, y1, w1, h1 };
+    Rectangle b = { x2, y2, w2, h2 };
+    return CheckCollisionRecs(a, b);
+}
+
+global inline bool circ_rect_overlaps2(i32 cx, i32 cy, i32 cr, i32 rx, i32 ry, i32 rw, i32 rh) {
+    Vector2 c = { cx, cy };
+    Rectangle r = { rx, ry, rw, rh };
+    return CheckCollisionCircleRec(c, cr, r);
+}
+
+global inline bool circ_circ_overlaps2(i32 x1, i32 y1, i32 r1, i32 x2, i32 y2, i32 r2) {
+    Vector2 c1 = { x1, y1 };
+    Vector2 c2 = { x2, y2 };
+    return CheckCollisionCircles(c1, r1, c2, r2);
+}
+
 
 // ----------------------------------------------------------------------------
 // Game objects
@@ -291,6 +313,10 @@ typedef struct {
 
     Entity ball;
     Entity paddle;
+    Entity bounds_l;
+    Entity bounds_r;
+    Entity bounds_t;
+    Entity bounds_b;
 
 //    struct World {
 //        Mover **movers;

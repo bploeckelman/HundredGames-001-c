@@ -134,17 +134,28 @@ void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 
     world.velocities.gravity[entity] = gravity;
 }
 
-// TODO - add convenience functions for initializing different types of colliders
-//   might only need a 'no width/height' version and a 'no radius' version
-//   since they can be calculated from each other
-void entity_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u32 height, u32 radius) {
+void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 width, u32 height) {
     world.collider_shapes.active[entity] = true;
     world.collider_shapes.offset_x[entity] = offset_x;
     world.collider_shapes.offset_y[entity] = offset_y;
     world.collider_shapes.width[entity] = width;
     world.collider_shapes.height[entity] = height;
+    world.collider_shapes.radius[entity] = calc_max(width, height) / 2;
+    world.collider_shapes.type[entity] = SHAPE_RECT;
+    world.collider_shapes.mask[entity] = mask;
+    world.collider_shapes.on_hit_x[entity] = NULL;
+    world.collider_shapes.on_hit_y[entity] = NULL;
+}
+
+void entity_add_collider_circ(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 radius) {
+    world.collider_shapes.active[entity] = true;
+    world.collider_shapes.offset_x[entity] = offset_x;
+    world.collider_shapes.offset_y[entity] = offset_y;
+    world.collider_shapes.width[entity] = 2 * radius;
+    world.collider_shapes.height[entity] = 2 * radius;
     world.collider_shapes.radius[entity] = radius;
-    world.collider_shapes.mask[entity] = MASK_NONE;
+    world.collider_shapes.type[entity] = SHAPE_CIRC;
+    world.collider_shapes.mask[entity] = mask;
     world.collider_shapes.on_hit_x[entity] = NULL;
     world.collider_shapes.on_hit_y[entity] = NULL;
 }
@@ -153,15 +164,38 @@ void entity_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u
 // Internal implementation
 
 internal bool entities_overlap(Entity a, Entity b, int offset_x, int offset_y) {
-    // TODO - handle different collider shapes
-
     i32 a_x = world.positions.x[a] + world.collider_shapes.offset_x[a] + offset_x;
     i32 a_y = world.positions.y[a] + world.collider_shapes.offset_y[a] + offset_y;
-    i32 a_w = world.collider_shapes.width[a];
-    i32 a_h = world.collider_shapes.height[a];
-
     i32 b_x = world.positions.x[b] + world.collider_shapes.offset_x[b];
     i32 b_y = world.positions.y[b] + world.collider_shapes.offset_y[b];
+
+    switch (world.collider_shapes.type[a]) {
+        case SHAPE_CIRC: {
+            i32 a_r = world.collider_shapes.radius[a];
+            switch (world.collider_shapes.type[b]) {
+                case SHAPE_CIRC: return circ_circ_overlaps2(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.radius[b]);
+                case SHAPE_RECT: return circ_rect_overlaps2(a_x, a_y, a_r, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
+                case SHAPE_NONE:
+                default: break;
+            }
+        } break;
+        case SHAPE_RECT: {
+            i32 a_w = world.collider_shapes.width[a];
+            i32 a_h = world.collider_shapes.height[a];
+            switch (world.collider_shapes.type[b]) {
+                case SHAPE_CIRC: return circ_rect_overlaps2(b_x, b_y, world.collider_shapes.radius[b], a_x, a_y, a_w, a_h);
+                case SHAPE_RECT: return rect_rect_overlaps2(a_x, a_y, a_w, a_h, b_x, b_y, world.collider_shapes.width[b], world.collider_shapes.height[b]);
+                case SHAPE_NONE:
+                default: break;
+            }
+        } break;
+
+        case SHAPE_NONE:
+        default: break;
+    }
+
+    i32 a_w = world.collider_shapes.width[a];
+    i32 a_h = world.collider_shapes.height[a];
     i32 b_w = world.collider_shapes.width[b];
     i32 b_h = world.collider_shapes.height[b];
 
@@ -290,6 +324,7 @@ internal void entity_create_colliders() {
     arrput(world.collider_shapes.width, 0);
     arrput(world.collider_shapes.height, 0);
     arrput(world.collider_shapes.radius, 0);
+    arrput(world.collider_shapes.type, SHAPE_NONE);
     arrput(world.collider_shapes.mask, MASK_NONE);
     arrput(world.collider_shapes.on_hit_x, NULL);
     arrput(world.collider_shapes.on_hit_y, NULL);
@@ -330,6 +365,7 @@ internal void entity_cleanup_colliders() {
         arrfree(world.collider_shapes.width);
         arrfree(world.collider_shapes.height);
         arrfree(world.collider_shapes.radius);
+        arrfree(world.collider_shapes.type);
         arrfree(world.collider_shapes.mask);
         arrfree(world.collider_shapes.on_hit_x);
         arrfree(world.collider_shapes.on_hit_y);

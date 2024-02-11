@@ -25,6 +25,16 @@ State state = {
     .current_screen = TITLE,
 };
 
+internal void BallHitX2(Entity entity, Entity collided_with) {
+    world.velocities.x[entity] *= -1;
+    world.velocities.remainder_x[entity] = 0;
+}
+
+internal void BallHitY2(Entity entity, Entity collided_with) {
+    world.velocities.y[entity] *= -1;
+    world.velocities.remainder_y[entity] = 0;
+}
+
 // ----------------------------------------------------------------------------
 // Entry point
 
@@ -67,7 +77,7 @@ internal void Init() {
 
     f32 ball_radius = 25;
     Vector2 ball_pos = {0, 100};
-    Vector2 ball_vel = {0, -200};
+    Vector2 ball_vel = {-100, -200};
     Vector2 paddle_size = {200, 50};
     Vector2 paddle_center = {0, (-state.window.height + paddle_size.y) / 2};
 //    state.entities = (struct Entities){
@@ -87,13 +97,33 @@ internal void Init() {
     entity_add_name(state.ball, (NameStr) {"ball"});
     entity_add_position(state.ball, ball_pos.x, ball_pos.y);
     entity_add_velocity(state.ball, ball_vel.x, ball_vel.y, 0, GRAVITY.y);
-    entity_add_collider(state.ball, -ball_radius, -ball_radius, 2*ball_radius, 2*ball_radius, ball_radius);
+    entity_add_collider_circ(state.ball, MASK_BALL, 0, 0, ball_radius);
+    world.collider_shapes.on_hit_x[state.ball] = BallHitX2;
+    world.collider_shapes.on_hit_y[state.ball] = BallHitY2;
 
     state.paddle = world_create_entity();
     entity_add_name(state.paddle, (NameStr) {"paddle"});
     entity_add_position(state.paddle, paddle_center.x, paddle_center.y);
     entity_add_velocity(state.paddle, 0, 0, 0.75f, 0);
-    entity_add_collider(state.paddle, paddle_size.x / 2, paddle_size.y / 2, paddle_size.x, paddle_size.y, calc_max(paddle_size.x, paddle_size.y) / 2);
+    entity_add_collider_rect(state.paddle, MASK_PADDLE, paddle_size.x / 2, paddle_size.y / 2, paddle_size.x, paddle_size.y);
+
+    // setup arena bounds
+    state.bounds_l = world_create_entity(); entity_add_name(state.bounds_l, (NameStr) {"bounds_l"});
+    state.bounds_r = world_create_entity(); entity_add_name(state.bounds_r, (NameStr) {"bounds_r"});
+    state.bounds_t = world_create_entity(); entity_add_name(state.bounds_t, (NameStr) {"bounds_t"});
+    state.bounds_b = world_create_entity(); entity_add_name(state.bounds_b, (NameStr) {"bounds_b"});
+
+    i32 size = 10;
+    Rectangle interior = (Rectangle) {-window_center.x, -window_center.y, state.window.width, state.window.height};
+    entity_add_position(state.bounds_l, interior.x                      - size / 2, interior.y + interior.height / 2);
+    entity_add_position(state.bounds_r, interior.x + interior.width     + size / 2, interior.y + interior.height / 2);
+    entity_add_position(state.bounds_t, interior.x + interior.width / 2 + size / 2, interior.y + interior.height + size / 2);
+    entity_add_position(state.bounds_b, interior.x + interior.width / 2 - size / 2, interior.y                   - size / 2);
+
+    entity_add_collider_rect(state.bounds_l, MASK_BOUNDS, -size / 2, -interior.height / 2, size, interior.height);
+    entity_add_collider_rect(state.bounds_r, MASK_BOUNDS, -size / 2, -interior.height / 2, size, interior.height);
+    entity_add_collider_rect(state.bounds_t, MASK_BOUNDS, -interior.width / 2, -size / 2, interior.width, size);
+    entity_add_collider_rect(state.bounds_b, MASK_BOUNDS, -interior.width / 2, -size / 2, interior.width, size);
 
     // add mover components to world array
 //    arrput(state.world.movers, &state.entities.ball.mover);
@@ -261,13 +291,14 @@ internal void DrawFrame() {
 //            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
 //            DrawTexturePro(texture, texture_rect, paddle.collider.shape.rect, origin, 0.0f, WHITE);
 
-            i32 pos_x = world.positions.x[state.ball];
-            i32 pos_y = world.positions.y[state.ball];
-            i32 off_x = world.collider_shapes.offset_x[state.ball];
-            i32 off_y = world.collider_shapes.offset_y[state.ball];
-            i32 width = world.collider_shapes.width[state.ball];
-            i32 height = world.collider_shapes.height[state.ball];
-            DrawRectangleGradientH(pos_x + off_x, pos_y + off_y, width, height, BLUE, YELLOW);
+            i32 pos_x, pos_y, off_x, off_y, width, height, radius;
+
+            pos_x = world.positions.x[state.ball];
+            pos_y = world.positions.y[state.ball];
+            off_x = world.collider_shapes.offset_x[state.ball];
+            off_y = world.collider_shapes.offset_y[state.ball];
+            radius = world.collider_shapes.radius[state.ball];
+            DrawCircleGradient(pos_x + off_x, pos_y + off_y, radius, BLUE, YELLOW);
 
             pos_x = world.positions.x[state.paddle];
             pos_y = world.positions.y[state.paddle];
@@ -290,11 +321,15 @@ internal void DrawFrame() {
                     pos_y = world.positions.y[i];
                     off_x = world.collider_shapes.offset_x[i];
                     off_y = world.collider_shapes.offset_y[i];
-                    width = world.collider_shapes.width[i];
-                    height = world.collider_shapes.height[i];
 
-                    // TODO - draw different shapes based on collider type
-                    DrawRectangleLinesEx((Rectangle){pos_x + off_x, pos_y + off_y, width, height}, 1, MAGENTA);
+                    if (world.collider_shapes.type[i] == SHAPE_CIRC) {
+                        radius = world.collider_shapes.radius[i];
+                        DrawCircleLines(pos_x + off_x, pos_y + off_y, radius, MAGENTA);
+                    } else if (world.collider_shapes.type[i] == SHAPE_RECT) {
+                        width = world.collider_shapes.width[i];
+                        height = world.collider_shapes.height[i];
+                        DrawRectangleLines(pos_x + off_x, pos_y + off_y, width, height, MAGENTA);
+                    }
                 }
 //                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
 //                    Collider *collider = state.world.colliders[i];
