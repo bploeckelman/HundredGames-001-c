@@ -69,16 +69,16 @@ internal void Init() {
     Vector2 ball_vel = {0, -200};
     Vector2 paddle_size = {200, 50};
     Vector2 paddle_center = {0, (-state.window.height + paddle_size.y) / 2};
-    state.entities = (struct Entities){
-        .ball = MakeBall(ball_pos, ball_vel, ball_radius, LoadAnimation(6, assets.ball_textures)),
-        .paddle = MakePaddle(paddle_center, paddle_size, LoadAnimation(1, assets.paddle_textures)),
-        .bounds = MakeArenaBounds((Rectangle) {
-                -window_center.x,
-                -window_center.y,
-                state.window.width,
-                state.window.height
-        }),
-    };
+//    state.entities = (struct Entities){
+//        .ball = MakeBall(ball_pos, ball_vel, ball_radius, LoadAnimation(6, assets.ball_textures)),
+//        .paddle = MakePaddle(paddle_center, paddle_size, LoadAnimation(1, assets.paddle_textures)),
+//        .bounds = MakeArenaBounds((Rectangle) {
+//                -window_center.x,
+//                -window_center.y,
+//                state.window.width,
+//                state.window.height
+//        }),
+//    };
 
     world_init();
 
@@ -86,13 +86,13 @@ internal void Init() {
     entity_add_name(state.ball, (NameStr) {"ball"});
     entity_add_position(state.ball, ball_pos.x, ball_pos.y);
     entity_add_velocity(state.ball, ball_vel.x, ball_vel.y, 0, GRAVITY.y);
-    entity_add_collider(state.ball, 0, 0, 0, 0, ball_radius);
+    entity_add_collider(state.ball, -ball_radius, -ball_radius, 2*ball_radius, 2*ball_radius, ball_radius);
 
     state.paddle = world_create_entity();
     entity_add_name(state.paddle, (NameStr) {"paddle"});
     entity_add_position(state.paddle, paddle_center.x, paddle_center.y);
     entity_add_velocity(state.paddle, 0, 0, 0.75f, 0);
-    entity_add_collider(state.paddle, 0, 0, paddle_size.x, paddle_size.y, 0);
+    entity_add_collider(state.paddle, paddle_size.x / 2, paddle_size.y / 2, paddle_size.x, paddle_size.y, calc_max(paddle_size.x, paddle_size.y) / 2);
 
     // add mover components to world array
 //    arrput(state.world.movers, &state.entities.ball.mover);
@@ -151,39 +151,39 @@ internal void UpdateGameplay() {
     }
 
     // update entities
-    Ball *ball = &state.entities.ball;
-    Paddle *paddle = &state.entities.paddle;
-
-    UpdateAnimation(&ball->anim);
-    UpdateAnimation(&paddle->anim);
-
-    // move the paddle based on user input and limit its speed
-    if (state.input_frame.move_left || state.input_frame.move_right) {
-        const f32 speed_max = 2000;
-        const f32 speed_impulse = 500;
-        const i32 sign = state.input_frame.move_left ? -1 : state.input_frame.move_right ? 1 : 0;
-
-        // if the paddle is moving in the opposite direction, stop it
-        bool switch_direction = sign != calc_sign(paddle->mover.vel.x);
-        if (switch_direction) {
-            paddle->mover.vel.x = 0;
-        }
-
-        // move the paddle based on user input, with an extra boost if we just switched direction
-        const f32 speed_boost = switch_direction ? 50 : 1;
-        paddle->mover.vel.x += sign * speed_boost * speed_impulse * dt;
-
-        // constrain the paddle's max speed
-        if (calc_abs(paddle->mover.vel.x) > speed_max) {
-            paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * dt);
-        }
-    } else {
-        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, 0, 2000 * dt);
-        paddle->mover.vel.y = calc_approach(paddle->mover.vel.y, 0, 2000 * dt);
-    }
-
-    UpdateMover(dt, &paddle->pos, &paddle->mover, &paddle->collider);
-    UpdateMover(dt, &ball->pos, &ball->mover, &ball->collider);
+//    Ball *ball = &state.entities.ball;
+//    Paddle *paddle = &state.entities.paddle;
+//
+//    UpdateAnimation(&ball->anim);
+//    UpdateAnimation(&paddle->anim);
+//
+//    // move the paddle based on user input and limit its speed
+//    if (state.input_frame.move_left || state.input_frame.move_right) {
+//        const f32 speed_max = 2000;
+//        const f32 speed_impulse = 500;
+//        const i32 sign = state.input_frame.move_left ? -1 : state.input_frame.move_right ? 1 : 0;
+//
+//        // if the paddle is moving in the opposite direction, stop it
+//        bool switch_direction = sign != calc_sign(paddle->mover.vel.x);
+//        if (switch_direction) {
+//            paddle->mover.vel.x = 0;
+//        }
+//
+//        // move the paddle based on user input, with an extra boost if we just switched direction
+//        const f32 speed_boost = switch_direction ? 50 : 1;
+//        paddle->mover.vel.x += sign * speed_boost * speed_impulse * dt;
+//
+//        // constrain the paddle's max speed
+//        if (calc_abs(paddle->mover.vel.x) > speed_max) {
+//            paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, sign * speed_max, 2000 * dt);
+//        }
+//    } else {
+//        paddle->mover.vel.x = calc_approach(paddle->mover.vel.x, 0, 2000 * dt);
+//        paddle->mover.vel.y = calc_approach(paddle->mover.vel.y, 0, 2000 * dt);
+//    }
+//
+//    UpdateMover(dt, &paddle->pos, &paddle->mover, &paddle->collider);
+//    UpdateMover(dt, &ball->pos, &ball->mover, &ball->collider);
 
     // update camera
     state.camera.target = (Vector2){0, 0};
@@ -191,9 +191,8 @@ internal void UpdateGameplay() {
     state.camera.rotation = 0.0f;
     state.camera.zoom = 1.0f;
 
-
-    // test ecs
-    world_update();
+    // TODO - process input to update velocity for paddle
+    world_update(dt);
 }
 
 internal void DrawFrame() {
@@ -223,16 +222,33 @@ internal void DrawFrame() {
             Rectangle texture_rect;
             const Vector2 origin = {0, 0};
 
-            const Ball ball = state.entities.ball;
-            const Rectangle ball_rect = GetRectForCircle(ball.collider.shape.circle);
-            texture = GetAnimationKeyframe(ball.anim);
-            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
-            DrawTexturePro(texture, texture_rect, ball_rect, origin, 0.0f, WHITE);
+//            const Ball ball = state.entities.ball;
+//            const Rectangle ball_rect = GetRectForCircle(ball.collider.shape.circle);
+//            texture = GetAnimationKeyframe(ball.anim);
+//            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
+//            DrawTexturePro(texture, texture_rect, ball_rect, origin, 0.0f, WHITE);
 
-            const Paddle paddle = state.entities.paddle;
-            texture = GetAnimationKeyframe(paddle.anim);
-            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
-            DrawTexturePro(texture, texture_rect, paddle.collider.shape.rect, origin, 0.0f, WHITE);
+//            const Paddle paddle = state.entities.paddle;
+//            texture = GetAnimationKeyframe(paddle.anim);
+//            texture_rect = (Rectangle){0, 0, texture.width, texture.height};
+//            DrawTexturePro(texture, texture_rect, paddle.collider.shape.rect, origin, 0.0f, WHITE);
+
+            i32 pos_x = world.positions.x[state.ball];
+            i32 pos_y = world.positions.y[state.ball];
+            i32 off_x = world.collider_shapes.offset_x[state.ball];
+            i32 off_y = world.collider_shapes.offset_y[state.ball];
+            i32 width = world.collider_shapes.width[state.ball];
+            i32 height = world.collider_shapes.height[state.ball];
+            DrawRectangleGradientH(pos_x + off_x, pos_y + off_y, width, height, BLUE, YELLOW);
+
+            pos_x = world.positions.x[state.paddle];
+            pos_y = world.positions.y[state.paddle];
+            off_x = world.collider_shapes.offset_x[state.paddle];
+            off_y = world.collider_shapes.offset_y[state.paddle];
+            width = world.collider_shapes.width[state.paddle];
+            height = world.collider_shapes.height[state.paddle];
+            DrawRectangleGradientV(pos_x + off_x, pos_y + off_y, width, height, RED, GREEN);
+
 
             if (state.debug.draw_colliders) {
 //                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
@@ -514,14 +530,14 @@ internal void BallHitX(Mover *self, Entity collided_with_id) {
     self->remainder.x = 0;
 
     // if the thing we hit was a paddle, impart some of its velocity to the ball
-    if (collided_with_id == state.entities.paddle.entity_id) {
-        printf("ball hit paddle - x\n");
-
-        const f32 speed_transmit_scale = 0.5f;
-        if (state.entities.paddle.mover.vel.x != 0) {
-            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
-        }
-    }
+//    if (collided_with_id == state.entities.paddle.entity_id) {
+//        printf("ball hit paddle - x\n");
+//
+//        const f32 speed_transmit_scale = 0.5f;
+//        if (state.entities.paddle.mover.vel.x != 0) {
+//            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
+//        }
+//    }
 }
 
 internal void BallHitY(Mover *self, Entity collided_with_id) {
@@ -529,14 +545,14 @@ internal void BallHitY(Mover *self, Entity collided_with_id) {
     self->remainder.y = 0;
 
     // if the thing we hit was a paddle, impart some of its velocity to the ball
-    if (collided_with_id == state.entities.paddle.entity_id) {
-        printf("ball hit paddle - y\n");
-
-        const f32 speed_transmit_scale = 0.5f;
-        if (state.entities.paddle.mover.vel.x != 0) {
-            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
-        }
-    }
+//    if (collided_with_id == state.entities.paddle.entity_id) {
+//        printf("ball hit paddle - y\n");
+//
+//        const f32 speed_transmit_scale = 0.5f;
+//        if (state.entities.paddle.mover.vel.x != 0) {
+//            self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
+//        }
+//    }
 }
 
 internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim) {

@@ -120,6 +120,7 @@ typedef struct {
 //  that way if the primary shape is a circle, the rect fields represent a bounding rect for the circle
 //  similarly if the primary shape is a rectangle, the circle field represents a bounding circle
 //  for a polygon, the circle and rect fields would also be bounding shapes, used for broad phase collisions
+typedef void (*OnHitFunc)(Entity entity, Entity collided_with);
 typedef struct {
     // flag indicating whether the entity for each element has this component or not
     bool *active;
@@ -130,6 +131,9 @@ typedef struct {
     u32 *width;
     u32 *height;
     u32 *radius;
+    u32 *mask;
+    OnHitFunc *on_hit_x;
+    OnHitFunc *on_hit_y;
 } ColliderShape;
 
 
@@ -151,7 +155,7 @@ typedef struct {
 extern World world;
 
 void world_init();
-void world_update();
+void world_update(f32 dt);
 void world_cleanup();
 
 Entity world_create_entity();
@@ -278,11 +282,11 @@ typedef struct {
         bool step_frame;
     } input_frame;
 
-    struct Entities {
-        Ball ball;
-        Paddle paddle;
-        ArenaBounds bounds;
-    } entities;
+//    struct Entities {
+//        Ball ball;
+//        Paddle paddle;
+//        ArenaBounds bounds;
+//    } entities;
 
     Entity ball;
     Entity paddle;
