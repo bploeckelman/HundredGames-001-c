@@ -49,17 +49,17 @@ void world_update(f32 dt) {
         f32 move_y = 0;
         if (has_velocity) {
             if (world.velocities.friction[i] > 0) {
-                world.velocities.vel_x[i] = calc_approach(world.velocities.vel_x[i], 0, world.velocities.friction[i] * dt);
-                world.velocities.vel_y[i] = calc_approach(world.velocities.vel_y[i], 0, world.velocities.friction[i] * dt);
+                world.velocities.x[i] = calc_approach(world.velocities.x[i], 0, world.velocities.friction[i] * dt);
+                world.velocities.y[i] = calc_approach(world.velocities.y[i], 0, world.velocities.friction[i] * dt);
             }
 
             // TODO - set gravity direction, for now just apply to y
             if (world.velocities.gravity[i] != 0) {
-                world.velocities.vel_y[i] += world.velocities.gravity[i] * dt;
+                world.velocities.y[i] += world.velocities.gravity[i] * dt;
             }
 
-            f32 total_move_x = world.velocities.remainder_x[i] + world.velocities.vel_x[i] * dt;
-            f32 total_move_y = world.velocities.remainder_y[i] + world.velocities.vel_y[i] * dt;
+            f32 total_move_x = world.velocities.remainder_x[i] + world.velocities.x[i] * dt;
+            f32 total_move_y = world.velocities.remainder_y[i] + world.velocities.y[i] * dt;
             move_x = (i32) total_move_x;
             move_y = (i32) total_move_y;
             world.velocities.remainder_x[i] = total_move_x - move_x;
@@ -126,8 +126,8 @@ void entity_add_position(Entity entity, u32 x, u32 y) {
 
 void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 gravity) {
     world.velocities.active[entity] = true;
-    world.velocities.vel_x[entity] = vel_x;
-    world.velocities.vel_y[entity] = vel_y;
+    world.velocities.x[entity] = vel_x;
+    world.velocities.y[entity] = vel_y;
     world.velocities.remainder_x[entity] = 0;
     world.velocities.remainder_y[entity] = 0;
     world.velocities.friction[entity] = friction;
@@ -205,7 +205,7 @@ internal bool entity_move_x(Entity entity, f32 amount) {
                     on_hit(entity, would_collide_with);
                 } else {
                     // stop
-                    world.velocities.vel_x[entity] = 0;
+                    world.velocities.x[entity] = 0;
                     world.velocities.remainder_x[entity] = 0;
                 }
 
@@ -239,7 +239,7 @@ internal bool entity_move_y(Entity entity, f32 amount) {
                     on_hit(entity, would_collide_with);
                 } else {
                     // stop
-                    world.velocities.vel_y[entity] = 0;
+                    world.velocities.y[entity] = 0;
                     world.velocities.remainder_y[entity] = 0;
                 }
 
@@ -275,8 +275,8 @@ internal void entity_create_positions() {
 
 internal void entity_create_velocities() {
     arrput(world.velocities.active, false);
-    arrput(world.velocities.vel_x, 0);
-    arrput(world.velocities.vel_y, 0);
+    arrput(world.velocities.x, 0);
+    arrput(world.velocities.y, 0);
     arrput(world.velocities.remainder_x, 0);
     arrput(world.velocities.remainder_y, 0);
     arrput(world.velocities.friction, 0);
@@ -315,8 +315,8 @@ internal void entity_cleanup_positions() {
 internal void entity_cleanup_velocities() {
     for (u32 i = 0; i < world.num_entities; ++i) {
         arrfree(world.velocities.active);
-        arrfree(world.velocities.vel_x);
-        arrfree(world.velocities.vel_y);
+        arrfree(world.velocities.x);
+        arrfree(world.velocities.y);
         arrfree(world.velocities.remainder_x);
         arrfree(world.velocities.remainder_y);
     }
@@ -374,8 +374,8 @@ internal void world_log() {
             e.prev_y = world.positions.prev_y[i];
         }
         if (world.velocities.active[i]) {
-            e.vel_x = world.velocities.vel_x[i];
-            e.vel_y = world.velocities.vel_y[i];
+            e.vel_x = world.velocities.x[i];
+            e.vel_y = world.velocities.y[i];
             e.remainder_x = world.velocities.remainder_x[i];
             e.remainder_y = world.velocities.remainder_y[i];
             e.friction = world.velocities.friction[i];

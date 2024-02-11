@@ -107,8 +107,8 @@ typedef struct {
     // flag indicating whether the entity for each element has this component or not
     bool *active;
 
-    f32 *vel_x;
-    f32 *vel_y;
+    f32 *x;
+    f32 *y;
     f32 *remainder_x;
     f32 *remainder_y;
     f32 *friction;

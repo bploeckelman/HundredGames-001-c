@@ -193,7 +193,33 @@ internal void UpdateGameplay() {
     state.camera.rotation = 0.0f;
     state.camera.zoom = 1.0f;
 
-    // TODO - process input to update velocity for paddle
+    // process paddle movement input
+    Velocity *vel = &world.velocities;
+    if (state.input_frame.move_left || state.input_frame.move_right) {
+        const f32 speed_max = 2000;
+        const f32 speed_impulse = 500;
+        const i32 sign = state.input_frame.move_left ? -1 : state.input_frame.move_right ? 1 : 0;
+
+        // if the paddle is moving in the opposite direction, stop it
+        bool switch_direction = sign != calc_sign(vel->x[state.paddle]);
+        if (switch_direction) {
+            vel->x[state.paddle] = 0;
+        }
+
+        // move the paddle based on user input, with an extra boost if we just switched direction
+        const f32 speed_boost = switch_direction ? 50 : 1;
+        vel->x[state.paddle] += sign * speed_boost * speed_impulse * dt;
+
+        // constrain the paddle's max speed
+        if (calc_abs(vel->x[state.paddle]) > speed_max) {
+            vel->x[state.paddle] = calc_approach(vel->x[state.paddle], sign * speed_max, 2000 * dt);
+        }
+    } else {
+        // always be slowing when no input
+        vel->x[state.paddle] = calc_approach(vel->x[state.paddle], 0, 2000 * dt);
+        vel->y[state.paddle] = calc_approach(vel->y[state.paddle], 0, 2000 * dt);
+    }
+
     world_update(dt);
 }
 
