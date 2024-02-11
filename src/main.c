@@ -6,12 +6,11 @@
 // ----------------------------------------------------------------------------
 // Global data
 
-global const Vector2 GRAVITY = {0, -50.0f};
+internal const Vector2 GRAVITY = {0, -50.0f};
 
-global Assets assets = {0};
-global World world = {0};
-
-global State state = {
+Assets assets = {0};
+World world = {0};
+State state = {
     .window = {
         .target_fps = 60,
         .width = 1280,
@@ -65,10 +64,13 @@ internal void Init() {
         .zoom = 1.0f
     };
 
+    f32 ball_radius = 25;
+    Vector2 ball_pos = {0, 100};
+    Vector2 ball_vel = {0, -200};
     Vector2 paddle_size = {200, 50};
     Vector2 paddle_center = {0, (-state.window.height + paddle_size.y) / 2};
     state.entities = (struct Entities){
-        .ball = MakeBall((Vector2){0, 100}, (Vector2){0, -200}, 25, LoadAnimation(6, assets.ball_textures)),
+        .ball = MakeBall(ball_pos, ball_vel, ball_radius, LoadAnimation(6, assets.ball_textures)),
         .paddle = MakePaddle(paddle_center, paddle_size, LoadAnimation(1, assets.paddle_textures)),
         .bounds = MakeArenaBounds((Rectangle) {
                 -window_center.x,
@@ -78,16 +80,30 @@ internal void Init() {
         }),
     };
 
+    world_init();
+
+    state.ball = world_create_entity();
+    entity_add_name(state.ball, (NameStr) {"ball"});
+    entity_add_position(state.ball, ball_pos.x, ball_pos.y);
+    entity_add_velocity(state.ball, ball_vel.x, ball_vel.y, 0, GRAVITY.y);
+    entity_add_collider(state.ball, 0, 0, 0, 0, ball_radius);
+
+    state.paddle = world_create_entity();
+    entity_add_name(state.paddle, (NameStr) {"paddle"});
+    entity_add_position(state.paddle, paddle_center.x, paddle_center.y);
+    entity_add_velocity(state.paddle, 0, 0, 0.75f, 0);
+    entity_add_collider(state.paddle, 0, 0, paddle_size.x, paddle_size.y, 0);
+
     // add mover components to world array
-    arrput(state.world.movers, &state.entities.ball.mover);
-    arrput(state.world.movers, &state.entities.paddle.mover);
+//    arrput(state.world.movers, &state.entities.ball.mover);
+//    arrput(state.world.movers, &state.entities.paddle.mover);
 
     // add collider components to world array
-    arrput(state.world.colliders, &state.entities.ball.collider);
-    arrput(state.world.colliders, &state.entities.paddle.collider);
-    for (i32 i = 0; i < arrlen(state.entities.bounds.colliders); i++) {
-        arrput(state.world.colliders, &state.entities.bounds.colliders[i]);
-    }
+//    arrput(state.world.colliders, &state.entities.ball.collider);
+//    arrput(state.world.colliders, &state.entities.paddle.collider);
+//    for (i32 i = 0; i < arrlen(state.entities.bounds.colliders); i++) {
+//        arrput(state.world.colliders, &state.entities.bounds.colliders[i]);
+//    }
 }
 
 internal void Update() {
@@ -174,6 +190,10 @@ internal void UpdateGameplay() {
     state.camera.offset = (Vector2){state.window.width / 2, state.window.height / 2};
     state.camera.rotation = 0.0f;
     state.camera.zoom = 1.0f;
+
+
+    // test ecs
+    world_update();
 }
 
 internal void DrawFrame() {
@@ -215,21 +235,21 @@ internal void DrawFrame() {
             DrawTexturePro(texture, texture_rect, paddle.collider.shape.rect, origin, 0.0f, WHITE);
 
             if (state.debug.draw_colliders) {
-                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
-                    Collider *collider = state.world.colliders[i];
-                    switch (collider->type) {
-                        case SHAPE_CIRC: {
-                            DrawCircleLinesV(collider->shape.circle.center, collider->shape.circle.radius, MAGENTA);
-                            break;
-                        }
-                        case SHAPE_RECT: {
-                            DrawRectangleLinesEx(collider->shape.rect, 1, MAGENTA);
-                            break;
-                        }
-                        case SHAPE_NONE:
-                        default: break;
-                    }
-                }
+//                for (u32 i = 0; i < arrlen(state.world.colliders); i++) {
+//                    Collider *collider = state.world.colliders[i];
+//                    switch (collider->type) {
+//                        case SHAPE_CIRC: {
+//                            DrawCircleLinesV(collider->shape.circle.center, collider->shape.circle.radius, MAGENTA);
+//                            break;
+//                        }
+//                        case SHAPE_RECT: {
+//                            DrawRectangleLinesEx(collider->shape.rect, 1, MAGENTA);
+//                            break;
+//                        }
+//                        case SHAPE_NONE:
+//                        default: break;
+//                    }
+//                }
             }
             break;
         }
@@ -261,6 +281,7 @@ internal void DrawFrame() {
 }
 
 internal void Shutdown() {
+    world_cleanup();
     UnloadRenderTexture(state.render_texture);
     UnloadAssets();
     CloseWindow();
@@ -324,15 +345,15 @@ internal void UpdateAnimation(Animation *anim) {
 internal Entity CheckForCollisions(Collider *collider, u32 mask, Vector2 offset) {
     if (!collider || collider->collides_with == MASK_NONE) return false;
 
-    for (i32 i = 0; i < arrlen(state.world.colliders); i++) {
-        Collider *other = state.world.colliders[i];
-
-        bool is_different  = collider != other;
-        bool collides_with = (collider->mask & mask) == mask;
-        if (is_different && collides_with && CollidersOverlap(collider, other, offset)) {
-            return other->entity_id;
-        }
-    }
+//    for (i32 i = 0; i < arrlen(state.world.colliders); i++) {
+//        Collider *other = state.world.colliders[i];
+//
+//        bool is_different  = collider != other;
+//        bool collides_with = (collider->mask & mask) == mask;
+//        if (is_different && collides_with && CollidersOverlap(collider, other, offset)) {
+//            return other->entity_id;
+//        }
+//    }
     return ENTITY_NONE;
 }
 

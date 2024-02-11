@@ -97,10 +97,10 @@ typedef struct {
     // flag indicating whether the entity for each element has this component or not
     bool *active;
 
-    u32 *x;
-    u32 *y;
-    u32 *prev_x;
-    u32 *prev_y;
+    i32 *x;
+    i32 *y;
+    i32 *prev_x;
+    i32 *prev_y;
 } Position;
 
 typedef struct {
@@ -111,6 +111,8 @@ typedef struct {
     f32 *vel_y;
     f32 *remainder_x;
     f32 *remainder_y;
+    f32 *friction;
+    f32 *gravity;
 } Velocity;
 
 // TODO - how to store different shape types and their data here...
@@ -123,8 +125,8 @@ typedef struct {
     bool *active;
 
     // offsets from entity position, typically {0, 0}
-    u32 *offset_x;
-    u32 *offset_y;
+    i32 *offset_x;
+    i32 *offset_y;
     u32 *width;
     u32 *height;
     u32 *radius;
@@ -136,6 +138,7 @@ typedef struct {
 // TODO - instead of having a separate 'active' array for each component type,
 //  a 'world' level bitfield could be used to indicate which entities have which components
 typedef struct {
+    bool active;
     Entity num_entities;
 
     Name names;
@@ -147,17 +150,17 @@ typedef struct {
 
 extern World world;
 
-void ecs_init();
-void ecs_update();
-void ecs_cleanup();
+void world_init();
+void world_update();
+void world_cleanup();
 
-Entity ecs_create_entity();
-void ecs_destroy_entity(Entity entity);
+Entity world_create_entity();
+void world_destroy_entity(Entity entity);
 
-void ecs_add_name(Entity entity, NameStr name);
-void ecs_add_position(Entity entity, u32 x, u32 y);
-void ecs_add_velocity(Entity entity, f32 vel_x, f32 vel_y);
-void ecs_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u32 height, u32 radius);
+void entity_add_name(Entity entity, NameStr name);
+void entity_add_position(Entity entity, u32 x, u32 y);
+void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 gravity);
+void entity_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u32 height, u32 radius);
 
 
 
@@ -281,15 +284,20 @@ typedef struct {
         ArenaBounds bounds;
     } entities;
 
-    struct World {
-        Mover **movers;
-        Collider **colliders;
-    } world;
+    Entity ball;
+    Entity paddle;
+
+//    struct World {
+//        Mover **movers;
+//        Collider **colliders;
+//    } world;
 
     GameScreen current_screen;
     RenderTexture render_texture;
     Camera2D camera;
 } State;
+
+extern State state;
 
 // ----------------------------------------------------------------------------
 // Assets
@@ -298,6 +306,8 @@ typedef struct {
     Texture2D *ball_textures ;
     Texture2D *paddle_textures;
 } Assets;
+
+extern Assets assets;
 
 void LoadAssets();
 void UnloadAssets();
