@@ -71,11 +71,95 @@ Texture2D GetAnimationKeyframe(Animation anim);
 void UpdateAnimation(Animation *anim);
 
 // ----------------------------------------------------------------------------
-// Components
+// Entity Component System
 
-typedef u32 EntityID;
-global const EntityID ENTITY_ID_NONE = 0;
-global EntityID next_entity_id = 1;
+// an entity is just an index into arrays of components
+typedef u32 Entity;
+global const Entity ENTITY_NONE = 0;
+global Entity next_entity = 1; // old...
+
+
+// wrap a fixed length string in a struct to simplify usage
+#define NAME_MAX_LEN 256
+typedef struct {
+    char val[NAME_MAX_LEN];
+} NameStr;
+global const NameStr NAME_EMPTY = {0};
+
+typedef struct {
+    // flag indicating whether the entity for each element has this component or not
+    bool *active;
+
+    NameStr *name;
+} Name;
+
+typedef struct {
+    // flag indicating whether the entity for each element has this component or not
+    bool *active;
+
+    u32 *x;
+    u32 *y;
+    u32 *prev_x;
+    u32 *prev_y;
+} Position;
+
+typedef struct {
+    // flag indicating whether the entity for each element has this component or not
+    bool *active;
+
+    f32 *vel_x;
+    f32 *vel_y;
+    f32 *remainder_x;
+    f32 *remainder_y;
+} Velocity;
+
+// TODO - how to store different shape types and their data here...
+//  maybe include all elements and use the type field to set the primary shape,
+//  that way if the primary shape is a circle, the rect fields represent a bounding rect for the circle
+//  similarly if the primary shape is a rectangle, the circle field represents a bounding circle
+//  for a polygon, the circle and rect fields would also be bounding shapes, used for broad phase collisions
+typedef struct {
+    // flag indicating whether the entity for each element has this component or not
+    bool *active;
+
+    // offsets from entity position, typically {0, 0}
+    u32 *offset_x;
+    u32 *offset_y;
+    u32 *width;
+    u32 *height;
+    u32 *radius;
+} ColliderShape;
+
+
+
+// TODO - technically these are sparse arrays, since not all entities will have all components
+// TODO - instead of having a separate 'active' array for each component type,
+//  a 'world' level bitfield could be used to indicate which entities have which components
+typedef struct {
+    Entity num_entities;
+
+    Name names;
+    Position positions;
+    Velocity velocities;
+    ColliderShape collider_shapes;
+} World;
+
+
+extern World world;
+
+void ecs_init();
+void ecs_update();
+void ecs_cleanup();
+
+Entity ecs_create_entity();
+void ecs_destroy_entity(Entity entity);
+
+void ecs_add_name(Entity entity, NameStr name);
+void ecs_add_position(Entity entity, u32 x, u32 y);
+void ecs_add_velocity(Entity entity, f32 vel_x, f32 vel_y);
+void ecs_add_collider(Entity entity, u32 offset_x, u32 offset_y, u32 width, u32 height, u32 radius);
+
+
 
 typedef struct {
     Vector2 center;
@@ -98,7 +182,7 @@ typedef enum {
 } ShapeType;
 
 typedef struct {
-    EntityID entity_id;
+    Entity entity_id;
     u32 mask;
     u32 collides_with;
     ShapeType type;
@@ -110,16 +194,16 @@ typedef struct {
 
 typedef struct Mover Mover;
 struct Mover {
-    EntityID entity_id;
+    Entity entity_id;
     Vector2 vel;
     Vector2 remainder;
     Vector2 gravity;
     f32 friction;
-    void (*on_hit_x)(Mover *self, EntityID collided_with_id);
-    void (*on_hit_y)(Mover *self, EntityID collided_with_id);
+    void (*on_hit_x)(Mover *self, Entity collided_with_id);
+    void (*on_hit_y)(Mover *self, Entity collided_with_id);
 };
 
-EntityID CheckForCollisions(Collider *collider, Vector2 offset);
+Entity CheckForCollisions(Collider *collider, u32 mask, Vector2 offset);
 bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset);
 void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider);
 
@@ -146,7 +230,7 @@ global inline Rectangle GetRectForCircle(Circle c) {
 // Game objects
 
 typedef struct {
-    EntityID entity_id;
+    Entity entity_id;
     Vector2 pos;
     Animation anim;
     Mover mover;
@@ -154,7 +238,7 @@ typedef struct {
 } Ball;
 
 typedef struct {
-    EntityID entity_id;
+    Entity entity_id;
     Vector2 pos;
     Animation anim;
     Mover mover;
@@ -162,10 +246,11 @@ typedef struct {
 } Paddle;
 
 typedef struct {
-    EntityID entity_id;
+    Entity entity_id;
     Rectangle interior;
     Collider *colliders;
 } ArenaBounds;
+
 
 // ----------------------------------------------------------------------------
 // Game state data

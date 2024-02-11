@@ -9,6 +9,7 @@
 global const Vector2 GRAVITY = {0, -50.0f};
 
 global Assets assets = {0};
+global World world = {0};
 
 global State state = {
     .window = {
@@ -320,19 +321,19 @@ internal void UpdateAnimation(Animation *anim) {
 // ----------------------------------------------------------------------------
 // Component functions
 
-internal EntityID CheckForCollisions(Collider *collider, Vector2 offset) {
-    if (!collider || collider->mask == MASK_NONE) return false;
+internal Entity CheckForCollisions(Collider *collider, u32 mask, Vector2 offset) {
+    if (!collider || collider->collides_with == MASK_NONE) return false;
 
     for (i32 i = 0; i < arrlen(state.world.colliders); i++) {
         Collider *other = state.world.colliders[i];
 
         bool is_different  = collider != other;
-        bool collides_with = collider->collides_with | other->mask;
+        bool collides_with = (collider->mask & mask) == mask;
         if (is_different && collides_with && CollidersOverlap(collider, other, offset)) {
             return other->entity_id;
         }
     }
-    return ENTITY_ID_NONE;
+    return ENTITY_NONE;
 }
 
 internal bool CollidersOverlap(Collider *a, Collider *b, Vector2 offset) {
@@ -390,9 +391,9 @@ internal bool MoveX(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
-            // check for potential collision before moving this pixel
-            EntityID collided_with = CheckForCollisions(collider, (Vector2) {sign, 0});
-            if (collided_with != ENTITY_ID_NONE) {
+            // check for potential collision with the world before moving this pixel
+            Entity collided_with = CheckForCollisions(collider, MASK_BOUNDS, (Vector2) {sign, 0});
+            if (collided_with != ENTITY_NONE) {
                 if (mover->on_hit_x) {
                     mover->on_hit_x(mover, collided_with);
                 } else {
@@ -426,9 +427,9 @@ internal bool MoveY(Vector2 *pos, Mover *mover, Collider *collider, i32 amount) 
 
         // move by one pixel at a time until it hits something or has moved the full amount
         while (amount != 0) {
-            // check for potential collision before moving this pixel
-            EntityID collided_with = CheckForCollisions(collider, (Vector2) {0, sign});
-            if (collided_with != ENTITY_ID_NONE) {
+            // check for potential collision with the world before moving this pixel
+            Entity collided_with = CheckForCollisions(collider, MASK_BOUNDS, (Vector2) {sign, 0});
+            if (collided_with != ENTITY_NONE) {
                 if (mover->on_hit_y) {
                     mover->on_hit_y(mover, collided_with);
                 } else {
@@ -464,15 +465,8 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
     }
 
     // apply gravity
-    bool wont_collide_x = !collider || !CheckForCollisions(collider, (Vector2) {calc_sign(mover->vel.x), 0});
-    if (mover->gravity.x != 0 && wont_collide_x) {
-        mover->vel.x += mover->gravity.x * dt;
-    }
-
-    bool wont_collide_y = !collider || !CheckForCollisions(collider, (Vector2) {0, calc_sign(mover->vel.y)});
-    if (mover->gravity.y != 0 && wont_collide_y) {
-        mover->vel.y += mover->gravity.y * dt;
-    }
+    if (mover->gravity.x != 0) mover->vel.x += mover->gravity.x * dt;
+    if (mover->gravity.y != 0) mover->vel.y += mover->gravity.y * dt;
 
     // get the total amount to move, including remainder from previous frame
     f32 total_move_x = mover->remainder.x + mover->vel.x * dt;
@@ -494,14 +488,14 @@ internal void UpdateMover(f32 dt, Vector2 *pos, Mover *mover, Collider *collider
 // ----------------------------------------------------------------------------
 // Factory functions
 
-internal const f32 perturbation_scale = 50.f;
-
-internal void BallHitX(Mover *self, EntityID collided_with_id) {
+internal void BallHitX(Mover *self, Entity collided_with_id) {
     self->vel.x *= -1;
     self->remainder.x = 0;
 
     // if the thing we hit was a paddle, impart some of its velocity to the ball
     if (collided_with_id == state.entities.paddle.entity_id) {
+        printf("ball hit paddle - x\n");
+
         const f32 speed_transmit_scale = 0.5f;
         if (state.entities.paddle.mover.vel.x != 0) {
             self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
@@ -509,13 +503,14 @@ internal void BallHitX(Mover *self, EntityID collided_with_id) {
     }
 }
 
-internal void BallHitY(Mover *self, EntityID collided_with_id) {
+internal void BallHitY(Mover *self, Entity collided_with_id) {
     self->vel.y *= -1;
-    self->vel.x += calc_signed_random() * perturbation_scale;
     self->remainder.y = 0;
 
     // if the thing we hit was a paddle, impart some of its velocity to the ball
     if (collided_with_id == state.entities.paddle.entity_id) {
+        printf("ball hit paddle - y\n");
+
         const f32 speed_transmit_scale = 0.5f;
         if (state.entities.paddle.mover.vel.x != 0) {
             self->vel.x += state.entities.paddle.mover.vel.x * speed_transmit_scale;
@@ -524,7 +519,7 @@ internal void BallHitY(Mover *self, EntityID collided_with_id) {
 }
 
 internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation anim) {
-    EntityID entity_id = next_entity_id++;
+    Entity entity_id = next_entity++;
     return (Ball){
             .entity_id = entity_id,
             .pos = center_pos,
@@ -554,7 +549,7 @@ internal Ball MakeBall(Vector2 center_pos, Vector2 vel, u32 radius, Animation an
 }
 
 internal Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim) {
-    EntityID entity_id = next_entity_id++;
+    Entity entity_id = next_entity++;
     return (Paddle){
             .entity_id = entity_id,
             .pos = center_pos,
@@ -585,7 +580,7 @@ internal Paddle MakePaddle(Vector2 center_pos, Vector2 size, Animation anim) {
 }
 
 internal ArenaBounds MakeArenaBounds(Rectangle interior) {
-    EntityID entity_id = next_entity_id++;
+    Entity entity_id = next_entity++;
     ArenaBounds bounds = {entity_id, interior, NULL};
 
     u32 mask = MASK_BOUNDS;

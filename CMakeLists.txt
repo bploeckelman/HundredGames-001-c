@@ -48,7 +48,10 @@ FetchContent_MakeAvailable(stb)
 ### Build and Link ------------------------------------------------------------
 
 # build the executable
-add_executable(${PROJECT_NAME} src/main.c)
+add_executable(${PROJECT_NAME}
+        src/main.c
+        src/world.c
+)
 
 # link libraries, raygui and stb are header-only so don't need to be linked
 target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
