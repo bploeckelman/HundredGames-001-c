@@ -26,13 +26,13 @@ State state = {
 };
 
 internal void BallHitX2(Entity entity, Entity collided_with) {
-    world.velocities.x[entity] *= -1;
-    world.velocities.remainder_x[entity] = 0;
+    world.movements.vel_x[entity] *= -1;
+    world.movements.remainder_x[entity] = 0;
 }
 
 internal void BallHitY2(Entity entity, Entity collided_with) {
-    world.velocities.y[entity] *= -1;
-    world.velocities.remainder_y[entity] = 0;
+    world.movements.vel_y[entity] *= -1;
+    world.movements.remainder_y[entity] = 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -88,8 +88,8 @@ internal void Init() {
     entity_add_position(state.ball, ball_pos.x, ball_pos.y);
     entity_add_velocity(state.ball, ball_vel.x, ball_vel.y, 0, GRAVITY.y);
     entity_add_collider_circ(state.ball, MASK_BALL, 0, 0, ball_radius);
-    world.collider_shapes.on_hit_x[state.ball] = BallHitX2;
-    world.collider_shapes.on_hit_y[state.ball] = BallHitY2;
+    world.colliders.on_hit_x[state.ball] = BallHitX2;
+    world.colliders.on_hit_y[state.ball] = BallHitY2;
 
     state.paddle = world_create_entity();
     entity_add_name(state.paddle, (NameStr) {"paddle"});
@@ -168,30 +168,29 @@ internal void UpdateGameplay() {
     state.camera.zoom = 1.0f;
 
     // process paddle movement input
-    Velocity *vel = &world.velocities;
     if (state.input_frame.move_left || state.input_frame.move_right) {
         const f32 speed_max = 2000;
         const f32 speed_impulse = 500;
         const i32 sign = state.input_frame.move_left ? -1 : state.input_frame.move_right ? 1 : 0;
 
         // if the paddle is moving in the opposite direction, stop it
-        bool switch_direction = sign != calc_sign(vel->x[state.paddle]);
+        bool switch_direction = sign != calc_sign(world.movements.vel_x[state.paddle]);
         if (switch_direction) {
-            vel->x[state.paddle] = 0;
+            world.movements.vel_x[state.paddle] = 0;
         }
 
         // move the paddle based on user input, with an extra boost if we just switched direction
         const f32 speed_boost = switch_direction ? 50 : 1;
-        vel->x[state.paddle] += sign * speed_boost * speed_impulse * dt;
+        world.movements.vel_x[state.paddle] += sign * speed_boost * speed_impulse * dt;
 
         // constrain the paddle's max speed
-        if (calc_abs(vel->x[state.paddle]) > speed_max) {
-            vel->x[state.paddle] = calc_approach(vel->x[state.paddle], sign * speed_max, 2000 * dt);
+        if (calc_abs(world.movements.vel_x[state.paddle]) > speed_max) {
+            world.movements.vel_x[state.paddle] = calc_approach(world.movements.vel_x[state.paddle], sign * speed_max, 2000 * dt);
         }
     } else {
         // always be slowing when no input
-        vel->x[state.paddle] = calc_approach(vel->x[state.paddle], 0, 2000 * dt);
-        vel->y[state.paddle] = calc_approach(vel->y[state.paddle], 0, 2000 * dt);
+        world.movements.vel_x[state.paddle] = calc_approach(world.movements.vel_x[state.paddle], 0, 2000 * dt);
+        world.movements.vel_y[state.paddle] = calc_approach(world.movements.vel_y[state.paddle], 0, 2000 * dt);
     }
 
     // update entities
@@ -229,17 +228,17 @@ internal void DrawFrame() {
 
             pos_x = world.positions.x[state.ball];
             pos_y = world.positions.y[state.ball];
-            off_x = world.collider_shapes.offset_x[state.ball];
-            off_y = world.collider_shapes.offset_y[state.ball];
-            radius = world.collider_shapes.radius[state.ball];
+            off_x = world.colliders.offset_x[state.ball];
+            off_y = world.colliders.offset_y[state.ball];
+            radius = world.colliders.radius[state.ball];
             DrawCircleGradient(pos_x + off_x, pos_y + off_y, radius, BLUE, YELLOW);
 
             pos_x = world.positions.x[state.paddle];
             pos_y = world.positions.y[state.paddle];
-            off_x = world.collider_shapes.offset_x[state.paddle];
-            off_y = world.collider_shapes.offset_y[state.paddle];
-            width = world.collider_shapes.width[state.paddle];
-            height = world.collider_shapes.height[state.paddle];
+            off_x = world.colliders.offset_x[state.paddle];
+            off_y = world.colliders.offset_y[state.paddle];
+            width = world.colliders.width[state.paddle];
+            height = world.colliders.height[state.paddle];
             DrawRectangleGradientV(pos_x + off_x, pos_y + off_y, width, height, RED, GREEN);
 
 
@@ -248,25 +247,26 @@ internal void DrawFrame() {
                 for (u32 i = 0; i < world.num_entities; i++) {
                     if (i == ENTITY_NONE) continue;
 
-                    bool has_position = entity_has_components(i, COMP_POSITION);
-                    bool has_collider = entity_has_components(i, COMP_COLLIDER);
+                    bool has_position = entity_has_components(i, COMPONENT_POSITION);
+                    bool has_collider = entity_has_components(i, COMPONENT_COLLIDER);
                     if (!has_position || !has_collider) continue;
 
                     pos_x = world.positions.x[i];
                     pos_y = world.positions.y[i];
-                    off_x = world.collider_shapes.offset_x[i];
-                    off_y = world.collider_shapes.offset_y[i];
+                    off_x = world.colliders.offset_x[i];
+                    off_y = world.colliders.offset_y[i];
 
-                    switch (world.collider_shapes.type[i]) {
+                    switch (world.colliders.shape[i]) {
                         case SHAPE_CIRC: {
-                            radius = world.collider_shapes.radius[i];
+                            radius = world.colliders.radius[i];
                             DrawCircleLines(pos_x + off_x, pos_y + off_y, radius, debug_color);
                         } break;
                         case SHAPE_RECT: {
-                            width = world.collider_shapes.width[i];
-                            height = world.collider_shapes.height[i];
+                            width = world.colliders.width[i];
+                            height = world.colliders.height[i];
                             DrawRectangleLines(pos_x + off_x, pos_y + off_y, width, height, debug_color);
                         } break;
+
                         case SHAPE_NONE:
                         default: break;
                     }

@@ -38,6 +38,10 @@ global inline f32 calc_signed_random() {
     return (GetRandomValue(0, 1000) / 500.0f) - 1.0f;
 }
 
+global inline f32 calc_clamp(f32 val, f32 min, f32 max) {
+    return (val < min) ? min : ((val > max) ? max : val);
+}
+
 // ----------------------------------------------------------------------------
 // Game lifecycle functions
 
@@ -88,23 +92,23 @@ global const NameStr NAME_EMPTY = {0};
 
 typedef struct {
     NameStr *name;
-} Name;
+} Names;
 
 typedef struct {
     i32 *x;
     i32 *y;
     i32 *prev_x;
     i32 *prev_y;
-} Position;
+} Positions;
 
 typedef struct {
-    f32 *x;
-    f32 *y;
+    f32 *vel_x;
+    f32 *vel_y;
     f32 *remainder_x;
     f32 *remainder_y;
     f32 *friction;
     f32 *gravity;
-} Velocity;
+} Movements;
 
 typedef u32 CollisionMask;
 enum {
@@ -119,13 +123,8 @@ typedef enum {
     SHAPE_CIRC,
     SHAPE_RECT,
     SHAPE_COUNT,
-} ShapeType;
+} Shape;
 
-// TODO - how to store different shape types and their data here...
-//  maybe include all elements and use the type field to set the primary shape,
-//  that way if the primary shape is a circle, the rect fields represent a bounding rect for the circle
-//  similarly if the primary shape is a rectangle, the circle field represents a bounding circle
-//  for a polygon, the circle and rect fields would also be bounding shapes, used for broad phase collisions
 typedef void (*OnHitFunc)(Entity entity, Entity collided_with);
 typedef struct {
     // offsets from entity position, typically {0, 0}
@@ -134,37 +133,37 @@ typedef struct {
     u32 *width;
     u32 *height;
     u32 *radius;
-    ShapeType *type;
+    Shape *shape;
     CollisionMask *mask;
     OnHitFunc *on_hit_x;
     OnHitFunc *on_hit_y;
-} ColliderShape;
+} Colliders;
 
 typedef u32 ComponentMask;
 enum {
-    COMP_NONE     = 0,
-    COMP_NAME     = (1 << 0),
-    COMP_POSITION = (1 << 1),
-    COMP_VELOCITY = (1 << 2),
-    COMP_COLLIDER = (1 << 3),
+    COMPONENT_NONE     = 0,
+    COMPONENT_NAME     = (1 << 0),
+    COMPONENT_POSITION = (1 << 1),
+    COMPONENT_MOVEMENT = (1 << 2),
+    COMPONENT_COLLIDER = (1 << 3),
 };
 
 typedef struct {
     bool *in_use;
     bool *active;
     ComponentMask *components;
-} EntityInfo;
+} EntityInfos;
 
 typedef struct {
     bool initialized;
 
     Entity num_entities;
-    EntityInfo infos;
+    EntityInfos infos;
 
-    Name names;
-    Position positions;
-    Velocity velocities;
-    ColliderShape collider_shapes;
+    Names names;
+    Positions positions;
+    Movements movements;
+    Colliders colliders;
 } World;
 
 extern World world;
@@ -185,7 +184,6 @@ void entity_add_velocity(Entity entity, f32 vel_x, f32 vel_y, f32 friction, f32 
 void entity_add_collider_rect(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 width, u32 height);
 void entity_add_collider_circ(Entity entity, CollisionMask mask, u32 offset_x, u32 offset_y, u32 radius);
 
-
 global inline bool rect_rect_overlaps(i32 x1, i32 y1, i32 w1, i32 h1, i32 x2, i32 y2, i32 w2, i32 h2) {
     Rectangle a = { x1, y1, w1, h1 };
     Rectangle b = { x2, y2, w2, h2 };
@@ -203,6 +201,10 @@ global inline bool circ_circ_overlaps(i32 x1, i32 y1, i32 r1, i32 x2, i32 y2, i3
     Vector2 c2 = { x2, y2 };
     return CheckCollisionCircles(c1, r1, c2, r2);
 }
+
+void circ_circ_resolve(Entity entity, Entity collided_with);
+void circ_rect_resolve(Entity entity, Entity collided_with);
+void rect_rect_resolve(Entity entity, Entity collided_with);
 
 // ----------------------------------------------------------------------------
 // Game state data
