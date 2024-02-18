@@ -81,7 +81,6 @@ void world_update(f32 dt) {
             entity_move_y(i, move_y);
         }
 
-        // TODO - update colliders
         if (has_collider) {
             for (u32 j = 0; j < world.num_entities; j++) {
                 if (i == j) continue;
@@ -287,25 +286,70 @@ internal void circ_circ_resolve(Entity entity, Entity collided_with) {
 }
 
 internal void circ_rect_resolve(Entity entity, Entity collided_with) {
-    f32 nearest_x = calc_clamp(world.positions.x[entity], world.positions.x[collided_with], world.positions.x[collided_with] + world.colliders.width[collided_with]);
-    f32 nearest_y = calc_clamp(world.positions.y[entity], world.positions.y[collided_with], world.positions.y[collided_with] + world.colliders.height[collided_with]);
-    f32 dx = nearest_x - world.positions.x[entity];
-    f32 dy = nearest_y - world.positions.y[entity];
+    i32 cx = world.positions.x[entity] + world.colliders.offset_x[entity];
+    i32 cy = world.positions.y[entity] + world.colliders.offset_y[entity];
+    i32 cr = world.colliders.radius[entity];
+
+    i32 rx = world.positions.x[collided_with] + world.colliders.offset_x[collided_with];
+    i32 ry = world.positions.y[collided_with] + world.colliders.offset_y[collided_with];
+    i32 rw = world.colliders.width[collided_with];
+    i32 rh = world.colliders.height[collided_with];
+
+    i32 nearest_x = calc_max(rx, calc_min(cx, rx + rw));
+    i32 nearest_y = calc_max(ry, calc_min(cy, ry + rh));
+    i32 dx = nearest_x - cx;
+    i32 dy = nearest_y - cy;
+
     f32 distance = sqrtf(dx * dx + dy * dy);
-    f32 overlap = world.colliders.radius[entity] - distance;
-    dx /= distance;
-    dy /= distance;
+    f32 overlap = cr - distance;
 
-    world.positions.x[entity] -= dx * overlap;
-    world.positions.y[entity] -= dy * overlap;
+    if (distance == 0) {
+        // special case, circle exactly at the center of rectangle
+        world.positions.x[entity] += cr;
+        world.positions.y[entity] += cr;
+    } else {
+        dx /= distance;
+        dy /= distance;
+        // move circle out of rect by overlap amount in direction vector
+        world.positions.x[entity] -= dx * overlap;
+        world.positions.y[entity] -= dy * overlap;
+    }
 
-    // TODO - resolve velocities, just invert the circle for now
+    // resolve velocities
+    // TODO - invert the circle for now
+    //   better will be to figure out which axes were overlapped,
+    //   and resolve taking that and movement direction into account
     world.movements.vel_x[entity] *= -1;
     world.movements.vel_y[entity] *= -1;
 }
 
 internal void rect_rect_resolve(Entity entity, Entity collided_with) {
+    i32 x1 = world.positions.x[entity] + world.colliders.offset_x[entity];
+    i32 y1 = world.positions.y[entity] + world.colliders.offset_y[entity];
+    i32 w1 = world.colliders.width[entity];
+    i32 h1 = world.colliders.height[entity];
 
+    i32 x2 = world.positions.x[collided_with] + world.colliders.offset_x[collided_with];
+    i32 y2 = world.positions.y[collided_with] + world.colliders.offset_y[collided_with];
+    i32 w2 = world.colliders.width[collided_with];
+    i32 h2 = world.colliders.height[collided_with];
+
+    i32 overlap_l = (x1 + w1) - x2;
+    i32 overlap_r = (x2 + w2) - x1;
+    i32 overlap_t = (y1 + h1) - y2;
+    i32 overlap_b = (y2 + h2) - y1;
+
+    i32 min_overlap = overlap_l;
+    if (overlap_r < min_overlap) min_overlap = overlap_r;
+    if (overlap_t < min_overlap) min_overlap = overlap_t;
+    if (overlap_b < min_overlap) min_overlap = overlap_b;
+
+    if      (min_overlap == overlap_l) world.positions.x[entity] -= overlap_l;
+    else if (min_overlap == overlap_r) world.positions.x[entity] += overlap_r;
+    else if (min_overlap == overlap_t) world.positions.y[entity] -= overlap_t;
+    else if (min_overlap == overlap_b) world.positions.y[entity] += overlap_b;
+
+    // TODO - resolve velocities
 }
 
 internal Entity world_check_collisions(Entity entity, u32 mask, int offset_x, int offset_y) {
@@ -327,10 +371,6 @@ internal Entity world_check_collisions(Entity entity, u32 mask, int offset_x, in
         }
     }
     return ENTITY_NONE;
-}
-
-internal void world_resolve_collision(Entity a, Entity b) {
-    // TODO - resolve collision
 }
 
 internal bool entity_move_x(Entity entity, f32 amount) {
